@@ -6,6 +6,8 @@ import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
@@ -21,14 +23,26 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+
+/**
+ * A URL under discord.com that does not exist upstream; the request is answered
+ * locally. Using a real https URL keeps the document origin non-opaque.
+ */
+private const val SHIM_URL = "https://discord.com/__kittytune_captcha"
+
 
 /**
  * Renders the hCaptcha challenge Discord requires before it will exchange a
  * remote-auth ticket.
  *
  * The challenge is solved by the user, exactly as intended - this only displays it
- * and passes the resulting token back. The page is loaded against a discord.com base
- * URL because hCaptcha validates the site key against the requesting origin.
+ * and passes the resulting token back.
+ *
+ * The page is served from a real https://discord.com URL that is intercepted locally,
+ * rather than via loadDataWithBaseURL. The latter leaves the document with an opaque
+ * origin, and hCaptcha talks to its challenge iframe over postMessage with an origin
+ * check - so the overlay opened but stayed blank.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -99,7 +113,21 @@ fun HCaptchaWebView(
                         javaScriptCanOpenWindowsAutomatically = true
                         setSupportMultipleWindows(false)
                     }
-                    webViewClient = WebViewClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView,
+                            request: WebResourceRequest
+                        ): WebResourceResponse? {
+                            if (request.url.toString() == SHIM_URL) {
+                                return WebResourceResponse(
+                                    "text/html",
+                                    "utf-8",
+                                    ByteArrayInputStream(html.toByteArray(Charsets.UTF_8))
+                                )
+                            }
+                            return null
+                        }
+                    }
                     // hCaptcha needs a chrome client; without one the challenge
                     // overlay silently fails to open after the checkbox is tapped.
                     webChromeClient = object : WebChromeClient() {
@@ -131,13 +159,7 @@ fun HCaptchaWebView(
                         },
                         "AndroidCaptcha"
                     )
-                    loadDataWithBaseURL(
-                        "https://discord.com",
-                        html,
-                        "text/html",
-                        "utf-8",
-                        null
-                    )
+                    loadUrl(SHIM_URL)
                 }
             }
         )
