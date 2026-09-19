@@ -61,6 +61,37 @@ class DiscordRemoteAuthManager {
         private const val LOGIN_ENDPOINT = "https://discord.com/api/v9/users/@me/remote-auth/login"
         private const val ORIGIN_HEADER = "https://discord.com"
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+        private const val BROWSER_VERSION = "131.0.0.0"
+        private const val CLIENT_BUILD_NUMBER = 354323
+
+        /**
+         * Discord rejects API calls that do not carry the client fingerprint its web
+         * client always sends. Without this header /users/@me/remote-auth/login answers
+         * 400, which is why the QR flow could reach the approval step and then fail on
+         * the final exchange. The values must stay consistent with USER_AGENT.
+         */
+        private fun buildSuperProperties(): String {
+            val props = JSONObject().apply {
+                put("os", "Android")
+                put("browser", "Chrome Mobile")
+                put("device", "")
+                put("system_locale", "en-US")
+                put("browser_user_agent", USER_AGENT)
+                put("browser_version", BROWSER_VERSION)
+                put("os_version", "10")
+                put("referrer", "")
+                put("referring_domain", "")
+                put("referrer_current", "")
+                put("referring_domain_current", "")
+                put("release_channel", "stable")
+                put("client_build_number", CLIENT_BUILD_NUMBER)
+                put("client_event_source", JSONObject.NULL)
+            }
+            return Base64.encodeToString(
+                props.toString().toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP
+            )
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -260,15 +291,28 @@ class DiscordRemoteAuthManager {
             val request = Request.Builder()
                 .url(LOGIN_ENDPOINT)
                 .addHeader("Origin", ORIGIN_HEADER)
+                .addHeader("Referer", "$ORIGIN_HEADER/")
                 .addHeader("User-Agent", USER_AGENT)
+                .addHeader("X-Super-Properties", buildSuperProperties())
+                .addHeader("X-Discord-Locale", "en-US")
+                .addHeader("Accept", "*/*")
+                .addHeader("Accept-Language", "en-US,en;q=0.9")
                 .post(body)
                 .build()
 
             val response = httpClient.newCall(request).execute()
             val rawBody = response.body.string()
             if (!response.isSuccessful) {
-                Log.e(TAG, "Failed ticket exchange: $rawBody")
-                _state.value = RemoteAuthState.Error("Failed to exchange ticket: ${response.code}")
+                Log.e(TAG, "Failed ticket exchange: HTTP ${response.code} / $rawBody")
+                // Surface Discord's own message: the bare status code made a rejected
+                // client fingerprint indistinguishable from an expired ticket.
+                val detail = runCatching { JSONObject(rawBody).optString("message") }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                _state.value = RemoteAuthState.Error(
+                    "Failed to exchange ticket: ${response.code}" +
+                        (detail?.let { " ($it)" } ?: "")
+                )
                 return
             }
 
