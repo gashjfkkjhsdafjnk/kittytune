@@ -1,7 +1,11 @@
 package com.alananasss.kittytune.ui.profile
 
 import android.annotation.SuppressLint
+import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
@@ -94,6 +98,21 @@ fun HCaptchaWebView(
                         setSupportMultipleWindows(false)
                     }
                     webViewClient = WebViewClient()
+                    // hCaptcha needs a chrome client; without one the challenge
+                    // overlay silently fails to open after the checkbox is tapped.
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                            Log.d(
+                                "HCaptchaWebView",
+                                "console: ${msg.message()} @${msg.sourceId()}:${msg.lineNumber()}"
+                            )
+                            return true
+                        }
+                    }
+                    // The challenge is served from hcaptcha.com inside this page, so
+                    // it needs third-party cookies, which WebViews block by default.
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     addJavascriptInterface(
                         object {
                             @JavascriptInterface

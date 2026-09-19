@@ -91,6 +91,7 @@ fun DiscordLoginScreen(
     val authState by authManager.state.collectAsState()
 
     var useWebView by rememberSaveable { mutableStateOf(false) }
+    var captchaError by remember { mutableStateOf<String?>(null) }
     var showManualTokenDialog by remember { mutableStateOf(false) }
     var hasLaunchedDeepLink by rememberSaveable { mutableStateOf(false) }
     var manualTokenInput by remember { mutableStateOf("") }
@@ -503,13 +504,22 @@ fun DiscordLoginScreen(
                                     textAlign = TextAlign.Center
                                 )
                                 Spacer(Modifier.height(12.dp))
+                                captchaError?.let { reason ->
+                                    Text(
+                                        text = stringResource(R.string.error_generic) + ": " + reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
                                 HCaptchaWebView(
                                     siteKey = state.siteKey,
                                     rqData = state.rqData,
                                     onSolved = { token ->
                                         authManager.submitCaptcha(token, state.rqData)
                                     },
-                                    onError = { /* keep the challenge visible so the user can retry */ }
+                                    onError = { reason -> captchaError = reason }
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 TextButton(
