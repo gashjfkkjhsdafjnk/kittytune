@@ -415,7 +415,7 @@ fun DiscordLoginScreen(
                         onError = { reason -> captchaError = reason },
                         onConsole = { line ->
                             captchaLog.add(line)
-                            if (captchaLog.size > 6) captchaLog.removeAt(0)
+                            if (captchaLog.size > 8) captchaLog.removeAt(0)
                         }
                     )
                     if (captchaLog.isNotEmpty()) {

@@ -92,6 +92,27 @@ fun HCaptchaWebView(
                   AndroidCaptcha.onError(String(e));
                 }
               }
+              // Diagnostic probe: reports where the challenge iframe actually ends
+              // up, so a blank overlay can be told apart from one that is simply
+              // positioned or sized out of view.
+              var lastProbe = '';
+              function probe() {
+                try {
+                  var out = 'VP ' + window.innerWidth + 'x' + window.innerHeight;
+                  var f = document.querySelectorAll('iframe');
+                  out += ' n=' + f.length;
+                  for (var i = 0; i < f.length; i++) {
+                    var r = f[i].getBoundingClientRect();
+                    var c = getComputedStyle(f[i]);
+                    out += ' |' + i + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)
+                        + '@' + Math.round(r.left) + ',' + Math.round(r.top)
+                        + ' ' + c.visibility.substr(0,3) + '/' + c.display.substr(0,4)
+                        + '/o' + c.opacity + '/z' + c.zIndex;
+                  }
+                  if (out !== lastProbe) { lastProbe = out; console.log(out); }
+                } catch (e) { console.log('probe err ' + e); }
+              }
+              setInterval(probe, 2000);
             </script>
             <script src="https://js.hcaptcha.com/1/api.js?onload=onloadCallback&render=explicit" async defer></script>
           </head>
@@ -135,12 +156,17 @@ fun HCaptchaWebView(
                     // overlay silently fails to open after the checkbox is tapped.
                     webChromeClient = object : WebChromeClient() {
                         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            val line = "[${msg.messageLevel()}] ${msg.message()}"
+                            val text = msg.message().orEmpty()
+                            val line = "[${msg.messageLevel()}] $text"
                             Log.d("HCaptchaWebView", "console: $line")
                             // Mirrored into the UI as well: adb is not available on the
                             // device itself, so logcat alone is not reachable for most
-                            // people hitting this screen.
-                            post { currentOnConsole(line) }
+                            // people hitting this screen. hCaptcha logs a steady stream
+                            // of bare "undefined" debug lines that would push everything
+                            // useful out of a short on-screen list.
+                            if (text != "undefined" && text.isNotBlank()) {
+                                post { currentOnConsole(line) }
+                            }
                             return true
                         }
                     }
