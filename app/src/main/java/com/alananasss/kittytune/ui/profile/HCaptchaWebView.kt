@@ -13,7 +13,6 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -104,7 +103,7 @@ fun HCaptchaWebView(
     // The challenge overlay is position:fixed, so it is centred in the WebView's own
     // viewport. The WebView therefore needs a real height - with only fillMaxWidth it
     // measured to the checkbox and the overlay was rendered into a few dp of space.
-    Box(modifier = modifier.fillMaxWidth().height(620.dp)) {
+    Box(modifier = modifier.fillMaxWidth()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
