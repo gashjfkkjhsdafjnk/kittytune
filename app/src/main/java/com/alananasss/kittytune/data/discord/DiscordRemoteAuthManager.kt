@@ -163,7 +163,10 @@ class DiscordRemoteAuthManager {
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         Log.e(TAG, "Remote Auth WebSocket failure", t)
-                        if (_state.value !is RemoteAuthState.Success && _state.value !is RemoteAuthState.Canceled) {
+                        if (_state.value !is RemoteAuthState.Success &&
+                            _state.value !is RemoteAuthState.Canceled &&
+                            _state.value !is RemoteAuthState.CaptchaRequired
+                        ) {
                             _state.value = RemoteAuthState.Error(t.message ?: "Connection error")
                         }
                     }
@@ -181,6 +184,13 @@ class DiscordRemoteAuthManager {
         encodedPublicKey: String,
         keyPair: KeyPair
     ) {
+        // Once the captcha is up the gateway has done its job and the ticket is in
+        // hand. Letting further ops through would overwrite CaptchaRequired, which
+        // tears the challenge down while the user is still solving it.
+        if (_state.value is RemoteAuthState.CaptchaRequired) {
+            Log.d(TAG, "Ignoring gateway message while captcha is pending")
+            return
+        }
         try {
             val json = JSONObject(text)
             val op = json.optString("op")
@@ -332,6 +342,13 @@ class DiscordRemoteAuthManager {
                 val captcha = runCatching { JSONObject(rawBody) }.getOrNull()
                     ?.takeIf { it.has("captcha_key") && it.has("captcha_sitekey") }
                 if (captcha != null) {
+                    // The exchange is plain HTTP from here on, so drop the gateway
+                    // rather than leave it running and racing the captcha UI.
+                    heartbeatJob?.cancel()
+                    heartbeatJob = null
+                    try {
+                        currentWebSocket?.close(1000, "Captcha required")
+                    } catch (_: Exception) {}
                     _state.value = RemoteAuthState.CaptchaRequired(
                         service = captcha.optString("captcha_service", "hcaptcha"),
                         siteKey = captcha.getString("captcha_sitekey"),
