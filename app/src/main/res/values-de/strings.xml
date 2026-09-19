@@ -1192,7 +1192,7 @@
     <string name="discord_login_scanned">Gescannt von %1$s. Bestätige in Discord!</string>
     <string name="discord_login_success">Discord erfolgreich verbunden!</string>
     <string name="discord_login_canceled">Anmeldung abgebrochen</string>
-    <string name="discord_login_captcha_desc">Discord verlangt vor dem Abschluss der Anmeldung eine kurze Sicherheitsprüfung. Löse die Aufgabe unten, um fortzufahren.</string>
+    <string name="discord_login_captcha_switch">Discord verlangt eine Sicherheitsprüfung. Die Discord-Anmeldeseite wird geöffnet, dort kannst du sie abschließen.</string>
 
     <!-- ABOUT -->
     <string name="pref_about_title">Über</string>

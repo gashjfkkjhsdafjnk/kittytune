@@ -924,7 +924,7 @@
     <string name="discord_login_scanned">Beszkennelve általa: %1$s. Erősítsd meg Discordban!</string>
     <string name="discord_login_success">Discord sikeresen csatlakoztatva!</string>
     <string name="discord_login_canceled">Bejelentkezés megszakítva</string>
-    <string name="discord_login_captcha_desc">A Discord egy gyors biztonsági ellenőrzést kér a bejelentkezés befejezése előtt. Oldd meg az alábbi feladatot a folytatáshoz.</string>
+    <string name="discord_login_captcha_switch">A Discord biztonsági ellenőrzést kér. Megnyitjuk a Discord bejelentkezési oldalát, ahol elvégezheted.</string>
     <!-- ABOUT -->
     <string name="pref_about_title">Névjegy</string>
     <string name="pref_about_subtitle">Verzió és kreditek</string>
