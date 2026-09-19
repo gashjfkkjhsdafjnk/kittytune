@@ -304,14 +304,17 @@ class DiscordRemoteAuthManager {
             val rawBody = response.body.string()
             if (!response.isSuccessful) {
                 Log.e(TAG, "Failed ticket exchange: HTTP ${response.code} / $rawBody")
-                // Surface Discord's own message: the bare status code made a rejected
-                // client fingerprint indistinguishable from an expired ticket.
+                // Surface whatever Discord actually said. Only reading "message" was
+                // not enough: field-level rejections come back as e.g.
+                // {"ticket":["Value is not a valid ticket"]} with no "message" key,
+                // which left the error looking identical to no detail at all.
                 val detail = runCatching { JSONObject(rawBody).optString("message") }
                     .getOrNull()
                     ?.takeIf { it.isNotBlank() }
+                    ?: rawBody.trim().take(300).takeIf { it.isNotBlank() }
+                    ?: "empty response body"
                 _state.value = RemoteAuthState.Error(
-                    "Failed to exchange ticket: ${response.code}" +
-                        (detail?.let { " ($it)" } ?: "")
+                    "Failed to exchange ticket: ${response.code} ($detail)"
                 )
                 return
             }
