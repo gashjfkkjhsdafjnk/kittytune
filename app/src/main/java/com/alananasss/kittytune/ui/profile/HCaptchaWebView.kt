@@ -37,10 +37,12 @@ fun HCaptchaWebView(
     rqData: String?,
     modifier: Modifier = Modifier,
     onSolved: (String) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    onConsole: (String) -> Unit = {}
 ) {
     val currentOnSolved by rememberUpdatedState(onSolved)
     val currentOnError by rememberUpdatedState(onError)
+    val currentOnConsole by rememberUpdatedState(onConsole)
 
     // JSONObject.quote handles escaping so a key or rqdata containing quotes or
     // slashes cannot break out of the generated script.
@@ -102,10 +104,12 @@ fun HCaptchaWebView(
                     // overlay silently fails to open after the checkbox is tapped.
                     webChromeClient = object : WebChromeClient() {
                         override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            Log.d(
-                                "HCaptchaWebView",
-                                "console: ${msg.message()} @${msg.sourceId()}:${msg.lineNumber()}"
-                            )
+                            val line = "[${msg.messageLevel()}] ${msg.message()}"
+                            Log.d("HCaptchaWebView", "console: $line")
+                            // Mirrored into the UI as well: adb is not available on the
+                            // device itself, so logcat alone is not reachable for most
+                            // people hitting this screen.
+                            post { currentOnConsole(line) }
                             return true
                         }
                     }

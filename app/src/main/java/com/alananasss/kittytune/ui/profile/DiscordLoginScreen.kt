@@ -92,6 +92,8 @@ fun DiscordLoginScreen(
 
     var useWebView by rememberSaveable { mutableStateOf(false) }
     var captchaError by remember { mutableStateOf<String?>(null) }
+    // Diagnostic only: mirrors the captcha page's console into the UI.
+    val captchaLog = remember { mutableStateListOf<String>() }
     var showManualTokenDialog by remember { mutableStateOf(false) }
     var hasLaunchedDeepLink by rememberSaveable { mutableStateOf(false) }
     var manualTokenInput by remember { mutableStateOf("") }
@@ -519,8 +521,20 @@ fun DiscordLoginScreen(
                                     onSolved = { token ->
                                         authManager.submitCaptcha(token, state.rqData)
                                     },
-                                    onError = { reason -> captchaError = reason }
+                                    onError = { reason -> captchaError = reason },
+                                    onConsole = { line ->
+                                        captchaLog.add(line)
+                                        if (captchaLog.size > 12) captchaLog.removeAt(0)
+                                    }
                                 )
+                                if (captchaLog.isNotEmpty()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = captchaLog.joinToString("\n"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Spacer(Modifier.height(12.dp))
                                 TextButton(
                                     onClick = { useWebView = true },
