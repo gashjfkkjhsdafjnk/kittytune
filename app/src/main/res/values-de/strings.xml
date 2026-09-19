@@ -2496,7 +2496,7 @@
     <string name="setup_auth_footer_hint">Du kannst jederzeit in den Einstellungen ein Konto verbinden oder wechseln.</string>
     <string name="setup_permission_media_title">Berechtigung für Audiodateien</string>
     <string name="setup_permission_media_description">KittyTune benötigt Zugriff auf deine Audiodateien, um lokale Musik und zwischengespeicherte Titel zu finden.</string>
-    <string name="setup_permission_notifications_title">Wiedergabebenachrichtigungen</string>
+    <string name="setup_permission_notifications_title">Benachrichtigungen zur Wiedergabe</string>
     <string name="setup_permission_notifications_description">Aktiviere Benachrichtigungen, um die Wiedergabesteuerung auf dem Sperrbildschirm und in der Benachrichtigungsleiste anzuzeigen.</string>
     <string name="setup_permission_granted">Berechtigung erteilt</string>
     <string name="setup_grant_media_permission">Audio-Berechtigung erteilen</string>
