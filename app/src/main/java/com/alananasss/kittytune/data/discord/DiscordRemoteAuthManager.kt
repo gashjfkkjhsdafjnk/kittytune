@@ -49,6 +49,18 @@ sealed interface RemoteAuthState {
         val token: String,
         val username: String?
     ) : RemoteAuthState
+    /**
+     * Discord answered the ticket exchange with captcha-required. The user has to
+     * solve the hCaptcha challenge themselves; the solution is handed back through
+     * [DiscordRemoteAuthManager.submitCaptcha].
+     */
+    data class CaptchaRequired(
+        val service: String,
+        val siteKey: String,
+        val rqData: String?,
+        val rqToken: String?,
+        val sessionId: String?
+    ) : RemoteAuthState
     data class Error(val message: String) : RemoteAuthState
     object Canceled : RemoteAuthState
 }
@@ -98,6 +110,7 @@ class DiscordRemoteAuthManager {
     private var heartbeatJob: Job? = null
     private var currentWebSocket: WebSocket? = null
     private var rsaKeyPair: KeyPair? = null
+    private var pendingTicket: String? = null
 
     private val httpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -281,9 +294,12 @@ class DiscordRemoteAuthManager {
     private suspend fun exchangeTicketForToken(
         ticket: String,
         keyPair: KeyPair,
-        webSocket: WebSocket
+        webSocket: WebSocket,
+        captchaKey: String? = null,
+        captchaRqToken: String? = null
     ) {
         try {
+            pendingTicket = ticket
             val body = JSONObject().apply { put("ticket", ticket) }
                 .toString()
                 .toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -297,6 +313,11 @@ class DiscordRemoteAuthManager {
                 .addHeader("X-Discord-Locale", "en-US")
                 .addHeader("Accept", "*/*")
                 .addHeader("Accept-Language", "en-US,en;q=0.9")
+                .apply {
+                    // Only present on the retry that carries a solved challenge.
+                    captchaKey?.let { addHeader("X-Captcha-Key", it) }
+                    captchaRqToken?.let { addHeader("X-Captcha-Rqtoken", it) }
+                }
                 .post(body)
                 .build()
 
@@ -304,6 +325,23 @@ class DiscordRemoteAuthManager {
             val rawBody = response.body.string()
             if (!response.isSuccessful) {
                 Log.e(TAG, "Failed ticket exchange: HTTP ${response.code} / $rawBody")
+
+                // Discord gates this endpoint behind hCaptcha. That is not an error we
+                // can retry blindly: the user has to solve the challenge, so hand the
+                // parameters to the UI and wait for submitCaptcha().
+                val captcha = runCatching { JSONObject(rawBody) }.getOrNull()
+                    ?.takeIf { it.has("captcha_key") && it.has("captcha_sitekey") }
+                if (captcha != null) {
+                    _state.value = RemoteAuthState.CaptchaRequired(
+                        service = captcha.optString("captcha_service", "hcaptcha"),
+                        siteKey = captcha.getString("captcha_sitekey"),
+                        rqData = captcha.optString("captcha_rqdata").takeIf { it.isNotBlank() },
+                        rqToken = captcha.optString("captcha_rqtoken").takeIf { it.isNotBlank() },
+                        sessionId = captcha.optString("captcha_session_id").takeIf { it.isNotBlank() }
+                    )
+                    return
+                }
+
                 // Surface whatever Discord actually said. Only reading "message" was
                 // not enough: field-level rejections come back as e.g.
                 // {"ticket":["Value is not a valid ticket"]} with no "message" key,
@@ -344,6 +382,25 @@ class DiscordRemoteAuthManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error in exchangeTicketForToken", e)
             _state.value = RemoteAuthState.Error(e.message ?: "Token exchange failed")
+        }
+    }
+
+    /**
+     * Retries the ticket exchange with a challenge the user just solved.
+     * [rqToken] is the captcha_rqdata handed out with the challenge; Discord expects
+     * it echoed back alongside the solution.
+     */
+    fun submitCaptcha(solution: String, rqToken: String?) {
+        val ticket = pendingTicket
+        val keyPair = rsaKeyPair
+        val webSocket = currentWebSocket
+        if (ticket == null || keyPair == null || webSocket == null) {
+            _state.value = RemoteAuthState.Error("Captcha session expired, please restart the login")
+            return
+        }
+        _state.value = RemoteAuthState.Connecting
+        scope.launch {
+            exchangeTicketForToken(ticket, keyPair, webSocket, solution, rqToken)
         }
     }
 

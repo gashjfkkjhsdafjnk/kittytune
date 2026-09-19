@@ -488,6 +488,38 @@ fun DiscordLoginScreen(
                                 )
                             }
 
+                            is RemoteAuthState.CaptchaRequired -> {
+                                Text(
+                                    text = stringResource(R.string.security_check),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.discord_login_captcha_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                HCaptchaWebView(
+                                    siteKey = state.siteKey,
+                                    rqData = state.rqData,
+                                    onSolved = { token ->
+                                        authManager.submitCaptcha(token, state.rqData)
+                                    },
+                                    onError = { /* keep the challenge visible so the user can retry */ }
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                TextButton(
+                                    onClick = { useWebView = true },
+                                    shapes = ButtonDefaults.shapes()
+                                ) {
+                                    Text(stringResource(R.string.discord_login_use_webview))
+                                }
+                            }
+
                             is RemoteAuthState.Error -> {
                                 Icon(
                                     imageVector = Icons.Rounded.ErrorOutline,

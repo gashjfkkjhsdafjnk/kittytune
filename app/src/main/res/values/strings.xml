@@ -1192,6 +1192,7 @@
     <string name="discord_login_scanned">Scanned by %1$s. Confirm in Discord!</string>
     <string name="discord_login_success">Discord connected successfully!</string>
     <string name="discord_login_canceled">Login canceled</string>
+    <string name="discord_login_captcha_desc">Discord requires a quick security check before it will finish the login. Solve the challenge below to continue.</string>
 
     <!-- ABOUT -->
     <string name="pref_about_title">About</string>
