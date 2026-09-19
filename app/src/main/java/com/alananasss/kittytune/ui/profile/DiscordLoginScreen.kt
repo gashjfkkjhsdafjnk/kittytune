@@ -91,6 +91,9 @@ fun DiscordLoginScreen(
     val authState by authManager.state.collectAsState()
 
     var useWebView by rememberSaveable { mutableStateOf(false) }
+    var captchaError by remember { mutableStateOf<String?>(null) }
+    // Diagnostic only: mirrors the captcha page's console into the UI.
+    val captchaLog = remember { mutableStateListOf<String>() }
     var showManualTokenDialog by remember { mutableStateOf(false) }
     var hasLaunchedDeepLink by rememberSaveable { mutableStateOf(false) }
     var manualTokenInput by remember { mutableStateOf("") }
@@ -369,6 +372,67 @@ fun DiscordLoginScreen(
                         }
                     )
                 }
+            } else if (authState is RemoteAuthState.CaptchaRequired) {
+                // Rendered outside the scrolling container on purpose: hCaptcha's
+                // challenge is position:fixed and is centred in the WebView's own
+                // viewport, so it needs the full screen rather than a box inside a
+                // scrollable column, which also swallowed its drag gestures.
+                val state = authState as RemoteAuthState.CaptchaRequired
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.security_check),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.discord_login_captcha_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    captchaError?.let { reason ->
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    HCaptchaWebView(
+                        siteKey = state.siteKey,
+                        rqData = state.rqData,
+                        modifier = Modifier.weight(1f),
+                        onSolved = { token -> authManager.submitCaptcha(token, state.rqToken) },
+                        onError = { reason -> captchaError = reason },
+                        onConsole = { line ->
+                            captchaLog.add(line)
+                            if (captchaLog.size > 8) captchaLog.removeAt(0)
+                        }
+                    )
+                    // Fixed height: a growing log was shrinking the WebView above it
+                    // via weight(1f), which showed up as the viewport slowly collapsing.
+                    Text(
+                        text = captchaLog.joinToString("\n"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.height(150.dp).verticalScroll(rememberScrollState())
+                    )
+                    TextButton(
+                        onClick = { useWebView = true },
+                        shapes = ButtonDefaults.shapes()
+                    ) {
+                        Text(stringResource(R.string.discord_login_use_webview))
+                    }
+                }
             } else {
                 // Remote Auth Flow (Deep Link & QR Code)
                 Box(
@@ -486,6 +550,59 @@ fun DiscordLoginScreen(
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            is RemoteAuthState.CaptchaRequired -> {
+                                Text(
+                                    text = stringResource(R.string.security_check),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.discord_login_captcha_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                captchaError?.let { reason ->
+                                    Text(
+                                        text = stringResource(R.string.error_generic) + ": " + reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                                HCaptchaWebView(
+                                    siteKey = state.siteKey,
+                                    rqData = state.rqData,
+                                    onSolved = { token ->
+                                        authManager.submitCaptcha(token, state.rqToken)
+                                    },
+                                    onError = { reason -> captchaError = reason },
+                                    onConsole = { line ->
+                                        captchaLog.add(line)
+                                        if (captchaLog.size > 12) captchaLog.removeAt(0)
+                                    }
+                                )
+                                if (captchaLog.isNotEmpty()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = captchaLog.joinToString("\n"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                TextButton(
+                                    onClick = { useWebView = true },
+                                    shapes = ButtonDefaults.shapes()
+                                ) {
+                                    Text(stringResource(R.string.discord_login_use_webview))
+                                }
                             }
 
                             is RemoteAuthState.Error -> {
