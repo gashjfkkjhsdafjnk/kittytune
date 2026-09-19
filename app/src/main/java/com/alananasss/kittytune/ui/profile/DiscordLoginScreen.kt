@@ -519,7 +519,7 @@ fun DiscordLoginScreen(
                                     siteKey = state.siteKey,
                                     rqData = state.rqData,
                                     onSolved = { token ->
-                                        authManager.submitCaptcha(token, state.rqData)
+                                        authManager.submitCaptcha(token, state.rqToken)
                                     },
                                     onError = { reason -> captchaError = reason },
                                     onConsole = { line ->

@@ -294,7 +294,7 @@ class DiscordRemoteAuthManager {
     private suspend fun exchangeTicketForToken(
         ticket: String,
         keyPair: KeyPair,
-        webSocket: WebSocket,
+        webSocket: WebSocket?,
         captchaKey: String? = null,
         captchaRqToken: String? = null
     ) {
@@ -377,7 +377,7 @@ class DiscordRemoteAuthManager {
 
             _state.value = RemoteAuthState.Success(token, username)
             try {
-                webSocket.close(1000, "Login completed")
+                webSocket?.close(1000, "Login completed")
             } catch (_: Exception) {}
         } catch (e: Exception) {
             Log.e(TAG, "Error in exchangeTicketForToken", e)
@@ -393,8 +393,10 @@ class DiscordRemoteAuthManager {
     fun submitCaptcha(solution: String, rqToken: String?) {
         val ticket = pendingTicket
         val keyPair = rsaKeyPair
+        // The exchange itself is a plain HTTP POST, so a gateway that timed out while
+        // the user was solving the challenge must not abort the retry.
         val webSocket = currentWebSocket
-        if (ticket == null || keyPair == null || webSocket == null) {
+        if (ticket == null || keyPair == null) {
             _state.value = RemoteAuthState.Error("Captcha session expired, please restart the login")
             return
         }
