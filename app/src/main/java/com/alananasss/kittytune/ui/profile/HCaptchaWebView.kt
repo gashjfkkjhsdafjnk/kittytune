@@ -2,6 +2,7 @@ package com.alananasss.kittytune.ui.profile
 
 import android.annotation.SuppressLint
 import android.util.Log
+import android.view.MotionEvent
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -113,6 +114,13 @@ fun HCaptchaWebView(
                 } catch (e) { console.log('probe err ' + e); }
               }
               setInterval(probe, 2000);
+              // Does the document see pointer events at all?
+              ['pointerdown','click'].forEach(function (t) {
+                document.addEventListener(t, function (e) {
+                  console.log('EVT ' + t + ' ' + Math.round(e.clientX) + ',' + Math.round(e.clientY)
+                      + ' on ' + (e.target && e.target.tagName));
+                }, true);
+              });
             </script>
             <script src="https://js.hcaptcha.com/1/api.js?onload=onloadCallback&render=explicit" async defer></script>
           </head>
@@ -188,10 +196,16 @@ fun HCaptchaWebView(
                         },
                         "AndroidCaptcha"
                     )
-                    // This sits inside a verticalScroll; without this the outer
-                    // scroll swallows the drags needed to solve an image challenge.
-                    setOnTouchListener { v, _ ->
+                    setOnTouchListener { v, ev ->
                         v.parent?.requestDisallowInterceptTouchEvent(true)
+                        // The challenge iframe never leaves its parked position, so the
+                        // open question is whether taps reach the page at all.
+                        if (ev.actionMasked == MotionEvent.ACTION_DOWN ||
+                            ev.actionMasked == MotionEvent.ACTION_UP
+                        ) {
+                            val name = if (ev.actionMasked == MotionEvent.ACTION_DOWN) "DOWN" else "UP"
+                            post { currentOnConsole("[TOUCH] $name ${ev.x.toInt()},${ev.y.toInt()}") }
+                        }
                         false
                     }
                     loadUrl(SHIM_URL)

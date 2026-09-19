@@ -418,13 +418,14 @@ fun DiscordLoginScreen(
                             if (captchaLog.size > 8) captchaLog.removeAt(0)
                         }
                     )
-                    if (captchaLog.isNotEmpty()) {
-                        Text(
-                            text = captchaLog.joinToString("\n"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    // Fixed height: a growing log was shrinking the WebView above it
+                    // via weight(1f), which showed up as the viewport slowly collapsing.
+                    Text(
+                        text = captchaLog.joinToString("\n"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.height(150.dp).verticalScroll(rememberScrollState())
+                    )
                     TextButton(
                         onClick = { useWebView = true },
                         shapes = ButtonDefaults.shapes()
