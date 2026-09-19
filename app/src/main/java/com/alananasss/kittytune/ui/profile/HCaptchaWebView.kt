@@ -114,6 +114,21 @@ fun HCaptchaWebView(
                 } catch (e) { console.log('probe err ' + e); }
               }
               setInterval(probe, 2000);
+              // Called from Kotlin on every tap. Converts the raw view coordinates
+              // into CSS pixels using the real ratio and names the element actually
+              // hit there, which settles whether taps land on the widget at all.
+              function hitTest(px, py, vw, vh) {
+                try {
+                  var cx = px * (window.innerWidth / vw);
+                  var cy = py * (window.innerHeight / vh);
+                  var el = document.elementFromPoint(cx, cy);
+                  var d = el ? el.tagName : 'null';
+                  if (el && el.id) d += '#' + el.id;
+                  if (el && el.tagName === 'IFRAME') d += '[' + (el.title || el.src || '').substr(0, 24) + ']';
+                  console.log('HIT view ' + Math.round(px) + ',' + Math.round(py)
+                      + ' css ' + Math.round(cx) + ',' + Math.round(cy) + ' -> ' + d);
+                } catch (e) { console.log('hit err ' + e); }
+              }
               // Does the document see pointer events at all?
               ['pointerdown','click'].forEach(function (t) {
                 document.addEventListener(t, function (e) {
@@ -205,6 +220,10 @@ fun HCaptchaWebView(
                         ) {
                             val name = if (ev.actionMasked == MotionEvent.ACTION_DOWN) "DOWN" else "UP"
                             post { currentOnConsole("[TOUCH] $name ${ev.x.toInt()},${ev.y.toInt()}") }
+                            if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                                val js = "hitTest(${ev.x}, ${ev.y}, ${v.width}, ${v.height})"
+                                post { (v as WebView).evaluateJavascript(js, null) }
+                            }
                         }
                         false
                     }
