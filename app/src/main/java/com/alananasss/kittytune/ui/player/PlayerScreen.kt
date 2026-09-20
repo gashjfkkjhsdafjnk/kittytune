@@ -3359,6 +3359,19 @@ fun PlayerProgress(viewModel: PlayerViewModel, textColor: Color) {
             WaveformPlayerProgress(viewModel = viewModel, textColor = textColor)
             Box(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
                 com.alananasss.kittytune.ui.player.automix.AutomixBadge(textColor = textColor)
+
+            RemixDeckPanel(
+                nextTitle = viewModel.queue.getOrNull(viewModel.currentQueueIndex + 1)?.title,
+                nextArtist = viewModel.queue.getOrNull(viewModel.currentQueueIndex + 1)?.displayArtist,
+                nextArtwork = viewModel.queue.getOrNull(viewModel.currentQueueIndex + 1)?.artworkUrl,
+                outBpm = com.alananasss.kittytune.audio.automix.AutomixManager.automixDebugInfo.collectAsState().value?.outBpm,
+                inBpm = viewModel.nextDeckBpm,
+                inKey = viewModel.nextDeckKey,
+                mixInSeconds = null,
+                skipInMs = viewModel.mixedSkipInMs,
+                textColor = textColor,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
             }
         } else {
             ClassicPlayerProgress(viewModel = viewModel, textColor = textColor)
@@ -4247,7 +4260,7 @@ fun PlayerControls(
                     .clickable(
                         interactionSource = nextInteractionSource,
                         indication = ripple()
-                    ) { viewModel.playNext() },
+                    ) { viewModel.skipMixed() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Rounded.SkipNext, null, tint = sideButtonContentColor, modifier = Modifier.size(32.dp))
@@ -11290,7 +11303,7 @@ fun OldPlayerControls(
                     }
                 }
             }
-            IconButton(onClick = { viewModel.playNext() }, modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = { viewModel.skipMixed() }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.SkipNext, null, tint = contentColorOverride, modifier = Modifier.size(36.dp))
             }
         }
@@ -11434,7 +11447,7 @@ fun LandscapePlayerView(
                         )
                     }
                 }
-                IconButton(onClick = { viewModel.playNext() }) {
+                IconButton(onClick = { viewModel.skipMixed() }) {
                     Icon(
                         imageVector = Icons.Rounded.SkipNext,
                         contentDescription = "Next",

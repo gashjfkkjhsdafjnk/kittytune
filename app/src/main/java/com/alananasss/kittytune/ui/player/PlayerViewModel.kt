@@ -245,6 +245,117 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     /** The track the director currently holds a grid for, so it is loaded once per track. */
     private var remixGridTrackId: Long? = null
 
+    /** The grid the director is working on, kept so a skip can be placed on it too. */
+    private var remixGridBpm: Float = 0f
+    private var remixGridFirstBeatMs: Long = 0L
+
+    /** Milliseconds until the mix a skip has queued, or null when none is waiting. */
+    var mixedSkipInMs by mutableStateOf<Long?>(null)
+        private set
+
+    private var mixedSkipJob: Job? = null
+
+    /**
+     * Skips by mixing into the next track on the next bar, instead of cutting on the press.
+     *
+     * The difference between a player and a deck. A cut lands wherever the finger did, which is
+     * almost never on the beat; waiting for the bar line costs at most two seconds and is the
+     * whole reason the result sounds deliberate. The wait is shown, because a button that does
+     * nothing for a moment reads as broken unless the app says what it is waiting for.
+     *
+     * Falls through to an ordinary skip when there is no grid to place it on - being slightly
+     * ragged beats not responding.
+     */
+    fun skipMixed() {
+        if (remixGridBpm <= 0f) {
+            playNext(manual = true)
+            return
+        }
+        // A second press while one is queued means they want it now, not two bars from now.
+        mixedSkipJob?.let {
+            it.cancel()
+            mixedSkipJob = null
+            mixedSkipInMs = null
+            playNext(manual = true)
+            return
+        }
+
+        val barMs = (60_000f / remixGridBpm) * 4f
+        val sinceFirst = (currentPosition - remixGridFirstBeatMs).coerceAtLeast(0L)
+        val untilBar = (barMs - (sinceFirst % barMs)).toLong().coerceIn(0L, barMs.toLong())
+
+        mixedSkipJob = viewModelScope.launch {
+            var left = untilBar
+            mixedSkipInMs = left
+            while (left > 0 && isActive) {
+                val step = minOf(100L, left)
+                delay(step)
+                left -= step
+                mixedSkipInMs = left
+            }
+            mixedSkipInMs = null
+            mixedSkipJob = null
+            if (isActive) {
+                // Routed through the same latch the automatic transition uses, so the two cannot
+                // both start a crossfade at once when the bar happens to fall near the trigger.
+                if (!MusicManager.isCrossfadingOut) {
+                    MusicManager.isCrossfadingOut = true
+                    playNext(manual = true, isCrossfade = true)
+                }
+            }
+        }
+    }
+
+    /** Tempo and key of the track queued next, loaded alongside the grid for the current one. */
+    var nextDeckBpm by mutableStateOf<Float?>(null)
+        private set
+    var nextDeckKey by mutableStateOf<String?>(null)
+        private set
+
+    /** The track the deck is showing, so it is only looked up when it changes. */
+    private var nextDeckTrackId: Long? = null
+
+    /**
+     * Loads what the deck shows about the track queued next.
+     *
+     * Only from the cache, never triggering an analysis of its own: the lookahead already
+     * analyses the next track when it matters, and a deck panel is not a reason to decode audio.
+     */
+    private fun ensureNextDeck(track: Track?) {
+        if (track == null) {
+            nextDeckTrackId = null
+            nextDeckBpm = null
+            nextDeckKey = null
+            return
+        }
+        if (nextDeckTrackId == track.id) return
+        nextDeckTrackId = track.id
+        nextDeckBpm = null
+        nextDeckKey = null
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                try {
+                    com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context)
+                        .beatInfoDao().getBeatInfo(track.id.toString())
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (nextDeckTrackId != track.id || info == null) return@launch
+            nextDeckBpm = info.bpm.takeIf { it > 0f }
+            nextDeckKey = info.keyPitchClass?.let { pc ->
+                val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+                names[pc % 12] + if (info.keyIsMinor == true) "m" else ""
+            }
+        }
+    }
+
+    fun cancelMixedSkip() {
+        mixedSkipJob?.cancel()
+        mixedSkipJob = null
+        mixedSkipInMs = null
+    }
+
     /**
      * Gives the director the grid for [track], analysing it first if nobody has yet.
      *
@@ -255,7 +366,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun ensureRemixGrid(track: Track) {
         if (remixGridTrackId == track.id) return
         remixGridTrackId = track.id
+        remixGridBpm = 0f
         remixDirector.setGrid(null, null)
+        cancelMixedSkip()
         com.alananasss.kittytune.audio.automix.AutomixManager.maybeAnalyzeBeat(
             track,
             com.alananasss.kittytune.audio.automix.BeatAnalysisPriority.IMMEDIATE,
@@ -271,6 +384,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (remixGridTrackId == track.id && info != null && info.confidence >= 0.3f) {
                 remixDirector.setGrid(info.bpm, info.firstBeatOffsetMs)
+                remixGridBpm = info.bpm
+                remixGridFirstBeatMs = info.firstBeatOffsetMs
+            } else if (remixGridTrackId == track.id) {
+                remixGridBpm = 0f
             }
         }
     }
@@ -4736,6 +4853,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         remixDirector.intensity = playerPrefs.getRemixRework()
                         if (playerPrefs.getRemixRework() > 0.01f) {
                             currentTrack?.let { ensureRemixGrid(it) }
+                            ensureNextDeck(_queue.getOrNull(currentQueueIndex + 1))
                         }
                         val exoDurForRemix = MusicManager.player.duration
                         remixDirector.onPosition(

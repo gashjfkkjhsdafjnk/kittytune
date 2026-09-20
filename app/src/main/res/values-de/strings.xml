@@ -651,6 +651,9 @@
     <string name="share_card_code_halftone_desc">Artwork vollflächig, schwerer zu scannen</string>
     <string name="remix_rework_title">Track live umbauen</string>
     <string name="remix_rework_subtitle">Loops, Filter-Sweeps und Echo auf der Phrase, im Beat-Raster des Tracks. Aus lässt den Track unangetastet.</string>
+    <string name="remix_deck_next">ALS NÄCHSTES</string>
+    <string name="remix_deck_mix_in">MIX IN %1$ds</string>
+    <string name="remix_deck_skip_in">MIX IN %1$.1fs</string>
     <string name="remix_mode_setting_title">Remix-Eingabe</string>
     <string name="remix_mode_setting_subtitle">Wie deine Eingabe gelesen wird</string>
     <string name="remix_mode_title">Wie soll deine Eingabe gelesen werden?</string>
