@@ -125,6 +125,7 @@ class PlayerPreferences(context: Context) {
         private const val KEY_SHARE_CARD_CODE = "share_card_code_mode"
         private const val KEY_REMIX_MODE = "remix_intent_mode"
         private const val KEY_REMIX_REWORK = "remix_rework_intensity"
+        private const val KEY_DJ_MODE = "dj_mode_active"
         private const val KEY_DOWNLOAD_DRM_STREAMS = "download_drm_streams_enabled"
         private const val KEY_SHOW_LYRICS_BUTTON = "show_lyrics_button_enabled"
         private const val KEY_INLINE_LYRICS = "inline_lyrics_enabled"
@@ -385,6 +386,16 @@ class PlayerPreferences(context: Context) {
      * Off by default. Someone who put a track on wants to hear that track, and an app that
      * starts rebuilding it uninvited is an app that is doing something to their music.
      */
+    /**
+     * Whether the deck is driving playback.
+     *
+     * One switch rather than a handful of settings, because the things it turns on only make
+     * sense together: reworking a track but cutting hard on a skip is neither a player nor a
+     * deck. Off is the ordinary player, unchanged.
+     */
+    fun getDjMode(): Boolean = prefs.getBoolean(KEY_DJ_MODE, false)
+    fun setDjMode(active: Boolean) = prefs.edit { putBoolean(KEY_DJ_MODE, active) }
+
     fun getRemixRework(): Float = prefs.getFloat(KEY_REMIX_REWORK, 0f)
     fun setRemixRework(value: Float) = prefs.edit { putFloat(KEY_REMIX_REWORK, value.coerceIn(0f, 1f)) }
 

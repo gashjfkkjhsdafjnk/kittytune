@@ -655,6 +655,16 @@
     <string name="remix_entry_set">DJ-Set</string>
     <string name="remix_entry_energy">Energie-Mix</string>
     <string name="remix_entry_wind_down">Runterkommen</string>
+    <string name="dj_title">DJ</string>
+    <string name="dj_headline">Deck</string>
+    <string name="dj_sub">Beatsynchrone Übergänge, Phrasen-Rolls und taktgenaue Skips.</string>
+    <string name="dj_on">Deck steuert</string>
+    <string name="dj_off">Normaler Player</string>
+    <string name="dj_intensity">Wie stark der Track bearbeitet wird</string>
+    <string name="dj_now">LÄUFT GERADE</string>
+    <string name="dj_no_track">Nichts läuft</string>
+    <string name="dj_grid_waiting">Beat-Raster wird gelesen…</string>
+    <string name="dj_grid_none">Kein brauchbares Raster für diesen Track</string>
     <string name="remix_deck_next">ALS NÄCHSTES</string>
     <string name="remix_deck_mix_in">MIX IN %1$ds</string>
     <string name="remix_deck_skip_in">MIX IN %1$.1fs</string>

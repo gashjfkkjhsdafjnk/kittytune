@@ -247,6 +247,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** The grid the director is working on, kept so a skip can be placed on it too. */
     private var remixGridBpm: Float = 0f
+        set(value) { field = value; remixGridBpmPublic = value }
+
+    /** The tempo the deck is working on, shown so a missing grid is visible rather than silent. */
+    var remixGridBpmPublic by mutableStateOf(0f)
+        private set
     private var remixGridFirstBeatMs: Long = 0L
 
     /** Milliseconds until the mix a skip has queued, or null when none is waiting. */
@@ -267,7 +272,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      * ragged beats not responding.
      */
     fun skipMixed() {
-        if (remixGridBpm <= 0f) {
+        // Gated on the deck being on, not on the rework control. Those were the same switch only
+        // by accident, and someone who turned the deck on and got hard cuts had every reason to
+        // think the feature was broken.
+        if (!playerPrefs.getDjMode() || remixGridBpm <= 0f) {
             playNext(manual = true)
             return
         }
@@ -4904,7 +4912,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         // handed over cleanly rather than cut off mid-roll.
                         remixDirector.intensity = playerPrefs.getRemixRework()
                         val reworkIntensity = playerPrefs.getRemixRework()
-                        if (reworkIntensity > 0.01f) {
+                        if (playerPrefs.getDjMode()) {
                             currentTrack?.let { ensureRemixGrid(it) }
                             ensureNextDeck(_queue.getOrNull(currentQueueIndex + 1))
                             maybePlanEarlyEntry(reworkIntensity)
