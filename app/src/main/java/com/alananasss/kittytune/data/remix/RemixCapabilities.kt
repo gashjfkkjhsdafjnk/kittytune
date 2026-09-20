@@ -71,15 +71,16 @@ object RemixCapabilities {
         val ramGb = totalRamGb(context)
         val device = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
 
-        // No model ships with the app yet, so the two model-backed modes report what the device
-        // could do rather than claiming to work. That distinction is the point of this screen:
-        // a listener told "your phone can run this, it is not built yet" learns something, and
-        // one told nothing learns nothing.
+        // The language model does not ship, so it reports what the device could do rather than
+        // claiming to work. That distinction is the point of this screen: a listener told "your
+        // phone can run this, it is not built yet" learns something, one told nothing does not.
         val availability = mapOf(
             RemixIntentMode.KEYWORD to RemixModeAvailability.READY,
+            // The sentence model ships with the app, so this one is real. It still asks for
+            // memory: the model is small but the runtime that loads it is not free.
             RemixIntentMode.EMBEDDING to when {
                 ramGb < EMBEDDING_MIN_RAM_GB -> RemixModeAvailability.DEVICE_TOO_SMALL
-                else -> RemixModeAvailability.NEEDS_MODEL
+                else -> RemixModeAvailability.READY
             },
             RemixIntentMode.LANGUAGE_MODEL to when {
                 ramGb < LANGUAGE_MODEL_MIN_RAM_GB -> RemixModeAvailability.DEVICE_TOO_SMALL

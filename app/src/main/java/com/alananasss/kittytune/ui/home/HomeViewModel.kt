@@ -107,7 +107,15 @@
          * picked decides which one is used once the others are built.
          */
         private val resolver: com.alananasss.kittytune.data.remix.RemixIntentResolver by lazy {
-            com.alananasss.kittytune.data.remix.KeywordIntentResolver(application)
+            val keywords = com.alananasss.kittytune.data.remix.KeywordIntentResolver(application)
+            val chosen = com.alananasss.kittytune.data.local.PlayerPreferences(application).getRemixMode()
+            when (chosen) {
+                com.alananasss.kittytune.data.remix.RemixIntentMode.EMBEDDING.name ->
+                    // The table stays underneath: a nearest match can still be a poor one, and a
+                    // poor match applied confidently is worse than searching for what was typed.
+                    com.alananasss.kittytune.data.remix.EmbeddingIntentResolver(application, keywords)
+                else -> keywords
+            }
         }
 
         /**

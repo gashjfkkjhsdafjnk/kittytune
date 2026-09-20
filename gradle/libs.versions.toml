@@ -41,6 +41,7 @@ mlkit-language-id = "17.0.6"
 brotli = "0.1.2"
 opencc4j = "1.14.0"
 zxing = "3.5.4"
+mediapipe-tasks-text = "0.10.21"
 material = "1.14.0"
 
 [libraries]
@@ -104,6 +105,7 @@ mlkit-language-id = { module = "com.google.mlkit:language-id", version.ref = "ml
 brotli = { group = "org.brotli", name = "dec", version.ref = "brotli" }
 opencc4j = { group = "com.github.houbb", name = "opencc4j", version.ref = "opencc4j" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediapipe-tasks-text" }
 camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
 camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }

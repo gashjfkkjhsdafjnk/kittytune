@@ -152,6 +152,11 @@ dependencies {
     implementation(libs.lottie.compose)
     implementation(libs.zxing.core)
 
+    // On-device sentence embeddings for reading what the listener typed into the remix
+    // field. Ships native libraries for every ABI, so it is measured against the APK before
+    // it is kept.
+    implementation(libs.mediapipe.tasks.text)
+
     // Scanning the desktop's pairing QR. zxing above already does the decoding; these are only
     // the camera frames to hand it (issue #33).
     implementation(libs.camera.core)
