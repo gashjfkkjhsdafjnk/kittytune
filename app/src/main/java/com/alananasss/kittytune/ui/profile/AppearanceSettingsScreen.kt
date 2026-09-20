@@ -91,6 +91,27 @@ fun AppearanceSettingsScreen(
     var trackDynamicTheme by remember { mutableStateOf(prefs.getTrackDynamicTheme()) }
     var themeMode by remember { mutableStateOf(prefs.getThemeMode()) }
     var shareCardCodeMode by remember { mutableIntStateOf(prefs.getShareCardCodeMode()) }
+    var remixMode by remember { mutableStateOf(prefs.getRemixMode()) }
+    var remixReport by remember {
+        mutableStateOf<com.alananasss.kittytune.data.remix.RemixCapabilities.Report?>(null)
+    }
+    val remixModeLabel = when (remixMode) {
+        com.alananasss.kittytune.data.remix.RemixIntentMode.EMBEDDING.name -> stringResource(R.string.remix_mode_embedding)
+        com.alananasss.kittytune.data.remix.RemixIntentMode.LANGUAGE_MODEL.name -> stringResource(R.string.remix_mode_llm)
+        else -> stringResource(R.string.remix_mode_keyword)
+    }
+
+    remixReport?.let { report ->
+        com.alananasss.kittytune.ui.home.RemixModeDialog(
+            report = report,
+            onDismiss = { remixReport = null },
+            onConfirm = { mode ->
+                prefs.setRemixMode(mode.name)
+                remixMode = mode.name
+                remixReport = null
+            },
+        )
+    }
     var showShareCardCodeDialog by remember { mutableStateOf(false) }
 
     if (showShareCardCodeDialog) {
@@ -544,11 +565,20 @@ fun AppearanceSettingsScreen(
                         stringResource(R.string.share_card_code_halftone),
                     )
                     SettingsItem(
-                        shape = getSettingsShape(1, 0),
+                        shape = getSettingsShape(2, 0),
                         title = stringResource(R.string.share_card_code_title),
                         subtitle = stringResource(R.string.share_card_code_subtitle),
                         trailingText = codeLabels[shareCardCodeMode.coerceIn(0, 2)],
                         onClick = { showShareCardCodeDialog = true },
+                    )
+                    SettingsItem(
+                        shape = getSettingsShape(2, 1),
+                        title = stringResource(R.string.remix_mode_setting_title),
+                        subtitle = stringResource(R.string.remix_mode_setting_subtitle),
+                        trailingText = remixModeLabel,
+                        onClick = {
+                            remixReport = com.alananasss.kittytune.data.remix.RemixCapabilities.inspect(context)
+                        },
                     )
                     Spacer(Modifier.height(16.dp))
 

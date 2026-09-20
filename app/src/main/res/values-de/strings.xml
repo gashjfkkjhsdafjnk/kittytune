@@ -649,6 +649,8 @@
     <string name="share_card_code_solid_desc">Höchster Kontrast, Artwork nur im Code</string>
     <string name="share_card_code_halftone">Ganzes Cover</string>
     <string name="share_card_code_halftone_desc">Artwork vollflächig, schwerer zu scannen</string>
+    <string name="remix_mode_setting_title">Remix-Eingabe</string>
+    <string name="remix_mode_setting_subtitle">Wie deine Eingabe gelesen wird</string>
     <string name="remix_mode_title">Wie soll deine Eingabe gelesen werden?</string>
     <string name="remix_mode_device">%1$s · %2$s GB RAM</string>
     <string name="remix_mode_start">Starten</string>

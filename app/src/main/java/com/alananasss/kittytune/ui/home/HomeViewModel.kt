@@ -106,16 +106,34 @@
          * Reads the request. Only the table-backed reading exists so far; the mode the listener
          * picked decides which one is used once the others are built.
          */
-        private val resolver: com.alananasss.kittytune.data.remix.RemixIntentResolver by lazy {
-            val keywords = com.alananasss.kittytune.data.remix.KeywordIntentResolver(application)
-            val chosen = com.alananasss.kittytune.data.local.PlayerPreferences(application).getRemixMode()
-            when (chosen) {
+        private var cachedResolver: com.alananasss.kittytune.data.remix.RemixIntentResolver? = null
+        private var cachedResolverMode: String? = null
+
+        /**
+         * The reader for the mode currently chosen, rebuilt when that changes.
+         *
+         * Held rather than made fresh each time, because the sentence model loads a file and
+         * embeds every category on first use. But held against the chosen mode, not simply
+         * forever: keeping the first one built meant changing the setting did nothing until the
+         * app was restarted, which reads exactly like the setting being broken.
+         */
+        private fun resolver(): com.alananasss.kittytune.data.remix.RemixIntentResolver {
+            val chosen = com.alananasss.kittytune.data.local.PlayerPreferences(getApplication()).getRemixMode()
+            cachedResolver?.let { existing ->
+                if (cachedResolverMode == chosen) return existing
+                (existing as? com.alananasss.kittytune.data.remix.EmbeddingIntentResolver)?.close()
+            }
+            val keywords = com.alananasss.kittytune.data.remix.KeywordIntentResolver(getApplication())
+            val built = when (chosen) {
                 com.alananasss.kittytune.data.remix.RemixIntentMode.EMBEDDING.name ->
                     // The table stays underneath: a nearest match can still be a poor one, and a
                     // poor match applied confidently is worse than searching for what was typed.
-                    com.alananasss.kittytune.data.remix.EmbeddingIntentResolver(application, keywords)
+                    com.alananasss.kittytune.data.remix.EmbeddingIntentResolver(getApplication(), keywords)
                 else -> keywords
             }
+            cachedResolver = built
+            cachedResolverMode = chosen
+            return built
         }
 
         /**
@@ -134,7 +152,7 @@
             remixLoading = true
             remixEmpty = false
             viewModelScope.launch {
-                val intent = resolver.resolve(query)
+                val intent = resolver().resolve(query)
                 remixLabel = intent.label
 
                 // Each reading is tried in turn and the results pooled: a confident one leads,
