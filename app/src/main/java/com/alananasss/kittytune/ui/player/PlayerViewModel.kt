@@ -232,6 +232,50 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     var shareCardLyrics by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /**
+     * Reworks the playing track on its own beat grid, when the listener has asked for it.
+     *
+     * Driven from the progress loop rather than its own timer: that loop already knows where
+     * playback stands, already stops when playback does, and already survives a seek.
+     */
+    private val remixDirector by lazy {
+        com.alananasss.kittytune.audio.automix.RemixDirector(MusicManager.activeRemixProcessor)
+    }
+
+    /** The track the director currently holds a grid for, so it is loaded once per track. */
+    private var remixGridTrackId: Long? = null
+
+    /**
+     * Gives the director the grid for [track], analysing it first if nobody has yet.
+     *
+     * The analysis is the same one automix uses and lands in the same cache, so a listener who
+     * has both on pays for it once. Until it arrives the director simply does nothing - working
+     * a track on a guessed tempo is worse than leaving it alone.
+     */
+    private fun ensureRemixGrid(track: Track) {
+        if (remixGridTrackId == track.id) return
+        remixGridTrackId = track.id
+        remixDirector.setGrid(null, null)
+        com.alananasss.kittytune.audio.automix.AutomixManager.maybeAnalyzeBeat(
+            track,
+            com.alananasss.kittytune.audio.automix.BeatAnalysisPriority.IMMEDIATE,
+        )
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                try {
+                    com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context)
+                        .beatInfoDao().getBeatInfo(track.id.toString())
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (remixGridTrackId == track.id && info != null && info.confidence >= 0.3f) {
+                remixDirector.setGrid(info.bpm, info.firstBeatOffsetMs)
+            }
+        }
+    }
+
+
     fun openShareCard(track: Track) {
         shareCardTrack = track
         shareCardArtwork = null
@@ -4686,6 +4730,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             lastSaveTime = now
                             saveStateAsync(savePositionOnly = true)
                         }
+
+                        // Fed before the transition logic below, so a phrase being worked is
+                        // handed over cleanly rather than cut off mid-roll.
+                        remixDirector.intensity = playerPrefs.getRemixRework()
+                        if (playerPrefs.getRemixRework() > 0.01f) {
+                            currentTrack?.let { ensureRemixGrid(it) }
+                        }
+                        val exoDurForRemix = MusicManager.player.duration
+                        remixDirector.onPosition(
+                            positionMs = currentPosition,
+                            remainingMs = if (exoDurForRemix > 0) exoDurForRemix - currentPosition else Long.MAX_VALUE,
+                        )
 
                         val crossfadeEnabled = playerPrefs.getCrossfadeEnabled()
                         val automixEnabled = playerPrefs.getAutomixEnabled()

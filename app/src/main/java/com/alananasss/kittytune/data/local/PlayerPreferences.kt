@@ -124,6 +124,7 @@ class PlayerPreferences(context: Context) {
         private const val KEY_YOUTUBE_FALLBACK = "youtube_fallback_enabled"
         private const val KEY_SHARE_CARD_CODE = "share_card_code_mode"
         private const val KEY_REMIX_MODE = "remix_intent_mode"
+        private const val KEY_REMIX_REWORK = "remix_rework_intensity"
         private const val KEY_DOWNLOAD_DRM_STREAMS = "download_drm_streams_enabled"
         private const val KEY_SHOW_LYRICS_BUTTON = "show_lyrics_button_enabled"
         private const val KEY_INLINE_LYRICS = "inline_lyrics_enabled"
@@ -378,6 +379,15 @@ class PlayerPreferences(context: Context) {
      *
      * Null is meaningful here: it is what makes the question appear once and then stop.
      */
+    /**
+     * How hard the player reworks a track while it plays: 0 off, 1 every phrase.
+     *
+     * Off by default. Someone who put a track on wants to hear that track, and an app that
+     * starts rebuilding it uninvited is an app that is doing something to their music.
+     */
+    fun getRemixRework(): Float = prefs.getFloat(KEY_REMIX_REWORK, 0f)
+    fun setRemixRework(value: Float) = prefs.edit { putFloat(KEY_REMIX_REWORK, value.coerceIn(0f, 1f)) }
+
     fun getRemixMode(): String? = prefs.getString(KEY_REMIX_MODE, null)
     fun setRemixMode(mode: String) = prefs.edit { putString(KEY_REMIX_MODE, mode) }
 

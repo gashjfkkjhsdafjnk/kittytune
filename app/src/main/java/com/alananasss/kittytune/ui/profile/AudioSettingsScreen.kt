@@ -61,6 +61,7 @@ fun AudioSettingsScreen(
 
     var automixEnabled by remember { mutableStateOf(prefs.getAutomixEnabled()) }
     var automixDebugOverlay by remember { mutableStateOf(prefs.getAutomixDebugOverlayEnabled()) }
+    var remixRework by remember { mutableFloatStateOf(prefs.getRemixRework()) }
     var automixTempoMatch by remember { mutableStateOf(prefs.getAutomixTempoMatchEnabled()) }
     var automixHarmonicMix by remember { mutableStateOf(prefs.getAutomixHarmonicMixEnabled()) }
     var automixDynamicMix by remember { mutableStateOf(prefs.getAutomixDynamicMixPointsEnabled()) }
@@ -668,6 +669,16 @@ fun AudioSettingsScreen(
                                         automixDebugOverlay = it
                                         prefs.setAutomixDebugOverlayEnabled(it)
                                     }
+                                )
+
+                                SettingsItem(
+                                    shape = RoundedCornerShape(24.dp),
+                                    title = stringResource(R.string.remix_rework_title),
+                                    subtitle = stringResource(R.string.remix_rework_subtitle),
+                                    hasSlider = true,
+                                    sliderValue = remixRework,
+                                    sliderRange = 0f..1f,
+                                    onSliderChange = { remixRework = it; prefs.setRemixRework(it) }
                                 )
                             }
                         }
