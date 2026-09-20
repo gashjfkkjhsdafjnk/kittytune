@@ -651,6 +651,10 @@
     <string name="share_card_code_halftone_desc">Whole artwork visible, harder to scan</string>
     <string name="remix_rework_title">Rework while playing</string>
     <string name="remix_rework_subtitle">Loops, filter sweeps and echo on the phrase, on the track\'s own beat grid. Off leaves the track alone.</string>
+    <string name="remix_deck_next_early">NEXT UP · EARLY BLEND</string>
+    <string name="remix_entry_set">DJ set</string>
+    <string name="remix_entry_energy">Energy mix</string>
+    <string name="remix_entry_wind_down">Wind down</string>
     <string name="remix_deck_next">NEXT UP</string>
     <string name="remix_deck_mix_in">MIX IN %1$ds</string>
     <string name="remix_deck_skip_in">MIXING IN %1$.1fs</string>

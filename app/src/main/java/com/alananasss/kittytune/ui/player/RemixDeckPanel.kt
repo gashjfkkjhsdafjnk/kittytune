@@ -45,6 +45,7 @@ fun RemixDeckPanel(
     inKey: String?,
     mixInSeconds: Int?,
     skipInMs: Long?,
+    earlyEntry: Boolean = false,
     textColor: Color,
     modifier: Modifier = Modifier,
 ) {
@@ -61,9 +62,14 @@ fun RemixDeckPanel(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(R.string.remix_deck_next),
+                        // Says so when the engine decided to go in ahead of plan, because a
+                        // transition that arrives sooner than the countdown suggested otherwise
+                        // looks like the countdown was wrong.
+                        text = stringResource(
+                            if (earlyEntry) R.string.remix_deck_next_early else R.string.remix_deck_next
+                        ),
                         style = MaterialTheme.typography.labelSmall,
-                        color = textColor.copy(alpha = 0.6f),
+                        color = if (earlyEntry) textColor else textColor.copy(alpha = 0.6f),
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
                     )

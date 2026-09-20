@@ -306,6 +306,55 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * A trigger earlier than the plan's, when the pair is close enough to justify one.
+     *
+     * Recomputed as the queue moves rather than once per track, since the next track can change
+     * under it - a decision made against a track that is no longer next is worse than none.
+     */
+    private var earlyTriggerMs: Long? = null
+    private var earlyTriggerFor: Pair<Long, Long>? = null
+
+    /** Shown on the deck so an entry that arrives early is explained rather than surprising. */
+    var earlyEntryActive by mutableStateOf(false)
+        private set
+
+    private fun maybePlanEarlyEntry(intensity: Float) {
+        val current = currentTrack ?: return
+        val next = _queue.getOrNull(currentQueueIndex + 1) ?: run {
+            earlyTriggerMs = null
+            earlyEntryActive = false
+            return
+        }
+        val pair = current.id to next.id
+        if (earlyTriggerFor == pair) return
+        earlyTriggerFor = pair
+
+        val plan = com.alananasss.kittytune.audio.automix.AutomixManager.currentAutomixPlan ?: return
+        val durMs = MusicManager.player.duration.takeIf { it > 0 } ?: return
+
+        viewModelScope.launch {
+            val (out, incoming) = withContext(Dispatchers.IO) {
+                try {
+                    val dao = com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context).beatInfoDao()
+                    dao.getBeatInfo(current.id.toString()) to dao.getBeatInfo(next.id.toString())
+                } catch (_: Exception) {
+                    null to null
+                }
+            }
+            if (earlyTriggerFor != pair) return@launch
+            val earlier = com.alananasss.kittytune.audio.automix.EarlyEntryPlanner.earlierTrigger(
+                plannedTriggerMs = plan.triggerTimeMs,
+                durationMs = durMs,
+                outBeat = out,
+                inBeat = incoming,
+                intensity = intensity,
+            )
+            earlyTriggerMs = earlier
+            earlyEntryActive = earlier != null
+        }
+    }
+
     /** Tempo and key of the track queued next, loaded alongside the grid for the current one. */
     var nextDeckBpm by mutableStateOf<Float?>(null)
         private set
@@ -367,6 +416,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (remixGridTrackId == track.id) return
         remixGridTrackId = track.id
         remixGridBpm = 0f
+        earlyTriggerMs = null
+        earlyTriggerFor = null
+        earlyEntryActive = false
         remixDirector.setGrid(null, null)
         cancelMixedSkip()
         com.alananasss.kittytune.audio.automix.AutomixManager.maybeAnalyzeBeat(
@@ -4851,9 +4903,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         // Fed before the transition logic below, so a phrase being worked is
                         // handed over cleanly rather than cut off mid-roll.
                         remixDirector.intensity = playerPrefs.getRemixRework()
-                        if (playerPrefs.getRemixRework() > 0.01f) {
+                        val reworkIntensity = playerPrefs.getRemixRework()
+                        if (reworkIntensity > 0.01f) {
                             currentTrack?.let { ensureRemixGrid(it) }
                             ensureNextDeck(_queue.getOrNull(currentQueueIndex + 1))
+                            maybePlanEarlyEntry(reworkIntensity)
+                        } else {
+                            earlyTriggerMs = null
                         }
                         val exoDurForRemix = MusicManager.player.duration
                         remixDirector.onPosition(
@@ -4914,7 +4970,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
                             val plan = if (isGaplessAlbum) null else com.alananasss.kittytune.audio.automix.AutomixManager.currentAutomixPlan
                             if (plan != null && dur > 0L) {
-                                val triggerTime = plan.triggerTimeMs
+                                // The plan's time is the safe one. When the pair is close in
+                                // tempo and key, going in a phrase or two earlier is what keeps a
+                                // set moving rather than playing every record to its end - so the
+                                // earlier of the two is used when the planner offers one.
+                                val triggerTime = earlyTriggerMs ?: plan.triggerTimeMs
                                 val remainingToTrigger = triggerTime - currentPosition
                                 val outBpm = com.alananasss.kittytune.audio.automix.AutomixManager.automixDebugInfo.value?.outBpm ?: 0f
                                 if (outBpm > 0f) {

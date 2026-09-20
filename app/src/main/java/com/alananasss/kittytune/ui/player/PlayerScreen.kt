@@ -3369,6 +3369,7 @@ fun PlayerProgress(viewModel: PlayerViewModel, textColor: Color) {
                 inKey = viewModel.nextDeckKey,
                 mixInSeconds = null,
                 skipInMs = viewModel.mixedSkipInMs,
+                earlyEntry = viewModel.earlyEntryActive,
                 textColor = textColor,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
