@@ -591,6 +591,25 @@ fun HomeContent(
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         item {
+            RemixPromptCard(
+                prompt = homeViewModel.remixPrompt,
+                onPromptChange = { homeViewModel.remixPrompt = it },
+                loading = homeViewModel.remixLoading,
+                empty = homeViewModel.remixEmpty,
+                onStart = {
+                    homeViewModel.startRemix(homeViewModel.remixPrompt) { tracks ->
+                        // A mix is the point, so the engine that makes it one is switched on
+                        // here rather than left to whatever the listener set months ago.
+                        com.alananasss.kittytune.data.local.PlayerPreferences(context)
+                            .setAutomixEnabled(true)
+                        playerViewModel.playPlaylist(tracks, 0, null)
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+
+        item {
             val categoriesToShow = if (homeViewModel.personalizedCategories.isNotEmpty()) {
                 homeViewModel.personalizedCategories
             } else {

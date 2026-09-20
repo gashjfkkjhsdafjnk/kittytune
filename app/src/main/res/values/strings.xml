@@ -649,6 +649,10 @@
     <string name="share_card_code_solid_desc">Highest contrast, artwork only inside the code</string>
     <string name="share_card_code_halftone">Full cover</string>
     <string name="share_card_code_halftone_desc">Whole artwork visible, harder to scan</string>
+    <string name="remix_prompt_title">Your own mix</string>
+    <string name="remix_prompt_subtitle">Say what you want to hear and it plays as one continuous mix.</string>
+    <string name="remix_prompt_hint">Techno, lo-fi, drum &amp; bass…</string>
+    <string name="remix_prompt_empty">Nothing found for that. Try a genre or a broader word.</string>
     <string name="share_card_face_song">Song</string>
     <string name="share_card_face_lyrics">Lyrics</string>
     <string name="share_card_qr">Cover as QR code</string>

@@ -2,6 +2,7 @@
 
     import android.app.Application
     import android.content.Context
+    import android.util.Log
     import androidx.compose.runtime.getValue
     import androidx.compose.runtime.mutableStateListOf
     import androidx.compose.runtime.mutableStateOf
@@ -85,6 +86,108 @@
             private val YOUTUBE_PATTERN = Pattern.compile("(?<=watch\\?v=|/videos/|embed/|youtu.be/|/v/|/e/|watch\\?v%3D|watch\\?feature=player_embedded&v=|%2Fvideos%2F|embed%\\u200C\\u200B2F|youtu.be%2F|%2Fv%2F)[^#&?\\n]*")
         }
         private val api = RetrofitClient.create(application)
+
+        /** What the listener typed for their own mix, kept so the field survives a scroll. */
+        var remixPrompt by mutableStateOf("")
+
+        /** True while a mix is being assembled, so the card can say so instead of looking idle. */
+        var remixLoading by mutableStateOf(false)
+            private set
+
+        /** Set when a prompt found nothing, so the card can say that rather than do nothing. */
+        var remixEmpty by mutableStateOf(false)
+            private set
+
+        /**
+         * Builds a continuous mix from what the listener asked for and starts it.
+         *
+         * The prompt is read as a genre or tag first, which is what people type here and what
+         * SoundCloud indexes best, and falls back to a plain search when the tag finds nothing -
+         * "sad piano at 3am" is not a tag, but it is a reasonable query.
+         *
+         * Automix is switched on for the run. Without it this would be a playlist, and a playlist
+         * is not what was asked for: the point is that the tracks run into one another.
+         */
+        fun startRemix(prompt: String, onReady: (List<com.alananasss.kittytune.domain.Track>) -> Unit) {
+            val query = prompt.trim()
+            if (query.isEmpty() || remixLoading) return
+            remixLoading = true
+            remixEmpty = false
+            viewModelScope.launch {
+                val found = try {
+                    withContext(Dispatchers.IO) {
+                        val byTag = try {
+                            api.searchTracksStrict(tag = query, sort = "popular", limit = 50).collection
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                        byTag.ifEmpty { api.searchTracks(query = query, limit = 50).collection }
+                    }
+                } catch (e: Exception) {
+                    Log.w("HomeViewModel", "Remix search failed for '$query': ${e.message}")
+                    emptyList()
+                }
+
+                val usable = found
+                    .filter { (it.durationMs ?: 0L) > 30_000L }
+                    .distinctBy { it.id }
+
+                remixLoading = false
+                if (usable.isEmpty()) {
+                    remixEmpty = true
+                    return@launch
+                }
+                onReady(orderForMixing(usable))
+            }
+        }
+
+        /**
+         * Orders the tracks so neighbours are easier to mix.
+         *
+         * Uses the beat data the app has already cached: a set that walks through nearby tempos
+         * and related keys gives the automix engine transitions it can actually beat-match,
+         * instead of asking it to bridge 90 and 160 bpm because search returned them that way.
+         *
+         * Only the analysed tracks can take part, and a fresh search is mostly unanalysed, so the
+         * rest keep their original order behind them. The ordering improves as the cache fills
+         * rather than arriving complete.
+         */
+        private suspend fun orderForMixing(
+            tracks: List<com.alananasss.kittytune.domain.Track>
+        ): List<com.alananasss.kittytune.domain.Track> = withContext(Dispatchers.IO) {
+            val dao = try {
+                com.alananasss.kittytune.data.local.AppDatabase.getDatabase(getApplication()).beatInfoDao()
+            } catch (_: Exception) {
+                return@withContext tracks
+            }
+            val known = LinkedHashMap<com.alananasss.kittytune.domain.Track, Pair<Float, Int?>>()
+            val unknown = mutableListOf<com.alananasss.kittytune.domain.Track>()
+            tracks.forEach { track ->
+                val info = try { dao.getBeatInfo(track.id.toString()) } catch (_: Exception) { null }
+                if (info != null && info.bpm > 0f) known[track] = info.bpm to info.keyPitchClass else unknown += track
+            }
+            if (known.size < 2) return@withContext tracks
+
+            // A nearest-neighbour walk, not a sort: what matters is the step from one track to the
+            // next, and sorting by tempo alone would still drop a key change on every one of them.
+            val remaining = known.toMutableMap()
+            val ordered = mutableListOf<com.alananasss.kittytune.domain.Track>()
+            var current = remaining.keys.first()
+            while (remaining.isNotEmpty()) {
+                val (bpm, key) = remaining.remove(current) ?: break
+                ordered += current
+                val next = remaining.minByOrNull { (_, v) ->
+                    val tempoStep = kotlin.math.abs(v.first - bpm) / 10f
+                    val keyStep = if (key != null && v.second != null) {
+                        val d = kotlin.math.abs(v.second!! - key)
+                        minOf(d, 12 - d).toFloat()
+                    } else 2f
+                    tempoStep + keyStep
+                }?.key ?: break
+                current = next
+            }
+            ordered + unknown
+        }
         private val prefs = application.getSharedPreferences("home_cache", Context.MODE_PRIVATE)
         private val gson = com.alananasss.kittytune.utils.AppUtils.gson
         private val tokenManager = TokenManager(application)
