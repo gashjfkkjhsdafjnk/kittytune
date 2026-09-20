@@ -46,6 +46,7 @@ fun RemixPromptCard(
     onPromptChange: (String) -> Unit,
     loading: Boolean,
     empty: Boolean,
+    understoodAs: String? = null,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -122,6 +123,17 @@ fun RemixPromptCard(
                         Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                     }
                 }
+            }
+
+            // Shown because a reading can be wrong, and a listener who can see what the app
+            // understood can correct it in one word instead of wondering why techno is playing.
+            if (understoodAs != null && !loading && !empty) {
+                Text(
+                    text = stringResource(R.string.remix_prompt_understood, understoodAs),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
             if (empty) {

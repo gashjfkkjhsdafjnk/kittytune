@@ -123,6 +123,7 @@ class PlayerPreferences(context: Context) {
         private const val KEY_AUTO_UPDATE = "auto_update_enabled"
         private const val KEY_YOUTUBE_FALLBACK = "youtube_fallback_enabled"
         private const val KEY_SHARE_CARD_CODE = "share_card_code_mode"
+        private const val KEY_REMIX_MODE = "remix_intent_mode"
         private const val KEY_DOWNLOAD_DRM_STREAMS = "download_drm_streams_enabled"
         private const val KEY_SHOW_LYRICS_BUTTON = "show_lyrics_button_enabled"
         private const val KEY_INLINE_LYRICS = "inline_lyrics_enabled"
@@ -372,6 +373,14 @@ class PlayerPreferences(context: Context) {
      * since someone sharing a code they will scan themselves values the robust style, and
      * someone posting a picture values the cover.
      */
+    /**
+     * Which reading the listener chose for their own mix, or null before they were asked.
+     *
+     * Null is meaningful here: it is what makes the question appear once and then stop.
+     */
+    fun getRemixMode(): String? = prefs.getString(KEY_REMIX_MODE, null)
+    fun setRemixMode(mode: String) = prefs.edit { putString(KEY_REMIX_MODE, mode) }
+
     fun getShareCardCodeMode(): Int = prefs.getInt(KEY_SHARE_CARD_CODE, 0)
     fun setShareCardCodeMode(mode: Int) = prefs.edit { putInt(KEY_SHARE_CARD_CODE, mode) }
 

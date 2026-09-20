@@ -98,6 +98,18 @@
         var remixEmpty by mutableStateOf(false)
             private set
 
+        /** What the prompt was understood as, shown back so a wrong reading is visible. */
+        var remixLabel by mutableStateOf<String?>(null)
+            private set
+
+        /**
+         * Reads the request. Only the table-backed reading exists so far; the mode the listener
+         * picked decides which one is used once the others are built.
+         */
+        private val resolver: com.alananasss.kittytune.data.remix.RemixIntentResolver by lazy {
+            com.alananasss.kittytune.data.remix.KeywordIntentResolver(application)
+        }
+
         /**
          * Builds a continuous mix from what the listener asked for and starts it.
          *
@@ -114,14 +126,24 @@
             remixLoading = true
             remixEmpty = false
             viewModelScope.launch {
+                val intent = resolver.resolve(query)
+                remixLabel = intent.label
+
+                // Each reading is tried in turn and the results pooled: a confident one leads,
+                // and the raw prompt trails it so a word the table did not know still finds
+                // something rather than returning nothing at all.
                 val found = try {
                     withContext(Dispatchers.IO) {
-                        val byTag = try {
-                            api.searchTracksStrict(tag = query, sort = "popular", limit = 50).collection
-                        } catch (_: Exception) {
-                            emptyList()
+                        intent.queries.flatMap { q ->
+                            val byTag = try {
+                                api.searchTracksStrict(tag = q, sort = "popular", limit = 50).collection
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                            byTag.ifEmpty {
+                                try { api.searchTracks(query = q, limit = 50).collection } catch (_: Exception) { emptyList() }
+                            }
                         }
-                        byTag.ifEmpty { api.searchTracks(query = query, limit = 50).collection }
                     }
                 } catch (e: Exception) {
                     Log.w("HomeViewModel", "Remix search failed for '$query': ${e.message}")
@@ -137,7 +159,7 @@
                     remixEmpty = true
                     return@launch
                 }
-                onReady(orderForMixing(usable))
+                onReady(orderForMixing(usable, intent.tempo))
             }
         }
 
@@ -153,7 +175,8 @@
          * rather than arriving complete.
          */
         private suspend fun orderForMixing(
-            tracks: List<com.alananasss.kittytune.domain.Track>
+            tracks: List<com.alananasss.kittytune.domain.Track>,
+            tempo: IntRange? = null,
         ): List<com.alananasss.kittytune.domain.Track> = withContext(Dispatchers.IO) {
             val dao = try {
                 com.alananasss.kittytune.data.local.AppDatabase.getDatabase(getApplication()).beatInfoDao()
@@ -164,7 +187,13 @@
             val unknown = mutableListOf<com.alananasss.kittytune.domain.Track>()
             tracks.forEach { track ->
                 val info = try { dao.getBeatInfo(track.id.toString()) } catch (_: Exception) { null }
-                if (info != null && info.bpm > 0f) known[track] = info.bpm to info.keyPitchClass else unknown += track
+                when {
+                    info == null || info.bpm <= 0f -> unknown += track
+                    // A pace the request implied is a filter, not a preference: something asked
+                    // for to fall asleep to is not served by a fast track that happens to mix well.
+                    tempo != null && info.bpm.toInt() !in tempo -> Unit
+                    else -> known[track] = info.bpm to info.keyPitchClass
+                }
             }
             if (known.size < 2) return@withContext tracks
 

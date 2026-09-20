@@ -591,18 +591,45 @@ fun HomeContent(
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         item {
+            val remixPrefs = remember { com.alananasss.kittytune.data.local.PlayerPreferences(context) }
+            var remixModeReport by remember {
+                mutableStateOf<com.alananasss.kittytune.data.remix.RemixCapabilities.Report?>(null)
+            }
+
+            fun launchRemix() {
+                homeViewModel.startRemix(homeViewModel.remixPrompt) { tracks ->
+                    // A mix is the point, so the engine that makes it one is switched on here
+                    // rather than left to whatever the listener set months ago.
+                    remixPrefs.setAutomixEnabled(true)
+                    playerViewModel.playPlaylist(tracks, 0, null)
+                }
+            }
+
+            remixModeReport?.let { report ->
+                RemixModeDialog(
+                    report = report,
+                    onDismiss = { remixModeReport = null },
+                    onConfirm = { mode ->
+                        remixPrefs.setRemixMode(mode.name)
+                        remixModeReport = null
+                        launchRemix()
+                    },
+                )
+            }
+
             RemixPromptCard(
                 prompt = homeViewModel.remixPrompt,
                 onPromptChange = { homeViewModel.remixPrompt = it },
                 loading = homeViewModel.remixLoading,
                 empty = homeViewModel.remixEmpty,
+                understoodAs = homeViewModel.remixLabel,
                 onStart = {
-                    homeViewModel.startRemix(homeViewModel.remixPrompt) { tracks ->
-                        // A mix is the point, so the engine that makes it one is switched on
-                        // here rather than left to whatever the listener set months ago.
-                        com.alananasss.kittytune.data.local.PlayerPreferences(context)
-                            .setAutomixEnabled(true)
-                        playerViewModel.playPlaylist(tracks, 0, null)
+                    // Asked once, on the first mix, and never again unless the listener clears
+                    // the app's data - a question that returns is a question nobody reads.
+                    if (remixPrefs.getRemixMode() == null) {
+                        remixModeReport = com.alananasss.kittytune.data.remix.RemixCapabilities.inspect(context)
+                    } else {
+                        launchRemix()
                     }
                 },
                 modifier = Modifier.padding(horizontal = 16.dp),
