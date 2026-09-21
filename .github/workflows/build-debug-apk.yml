@@ -8,6 +8,9 @@ on:
     paths:
       - '.github/workflows/build-debug-apk.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Debug APK
@@ -42,3 +45,21 @@ jobs:
           name: kittytune-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
+      # ── Commit the APK into the repo (the sandbox this session runs in can't
+      #    reach dl.google.com or Azure Blob Storage to build/download it itself) ──
+      - name: Commit APK to repo
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/*.apk dist/kittytune-debug.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f dist/kittytune-debug.apk
+          if git diff --staged --quiet; then
+            echo "APK unchanged, nothing to commit"
+            exit 0
+          fi
+          git commit -m "ci: update debug APK build [skip ci]
+
+          Built from ${{ github.sha }}"
+          git push origin HEAD:${{ github.ref_name }}
