@@ -313,6 +313,12 @@ fun AppearanceSettingsScreen(
                         appLanguage,
                         onLanguageSelected
                     )
+                    LanguageRadioButton(
+                        stringResource(R.string.lang_turkish),
+                        AppLanguage.TURKISH,
+                        appLanguage,
+                        onLanguageSelected
+                    )
                 }
             },
             confirmButton = {
@@ -508,6 +514,7 @@ fun AppearanceSettingsScreen(
                                 AppLanguage.HUNGARIAN -> stringResource(R.string.lang_hungarian)
                                 AppLanguage.RUSSIAN -> stringResource(R.string.lang_russian)
                                 AppLanguage.VIETNAMESE -> stringResource(R.string.lang_vietnamese)
+                                AppLanguage.TURKISH -> stringResource(R.string.lang_turkish)
                             },
                             onClick = { showLanguageDialog = true }
                         )
