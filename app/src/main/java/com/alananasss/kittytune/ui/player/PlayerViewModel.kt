@@ -129,6 +129,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     var isScrubbing by mutableStateOf(false)
     var isPlayerExpanded by mutableStateOf(false)
     var isSidePlayerOpen by mutableStateOf(false)
+    var isDjModeActive by mutableStateOf(false)
     var isTabletSplitMode by mutableStateOf(true)
     var isLiked by mutableStateOf(false)
     var backgroundColor by mutableStateOf(Color(0xFF1E1E1E))
@@ -718,15 +719,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 if (MusicManager.player.duration > 0) {
                     val exoDuration = MusicManager.player.duration
                     val trackDuration = currentTrack?.durationMs ?: 0L
-                    duration = exoDuration
 
-                    // Detect preview / wrong-stream situations: if ExoPlayer reports a duration
-                    // that dramatically differs from the track's expected duration, it is very
-                    // likely that the resolved stream is a preview, a snippet, or an entirely
-                    // different recording. Log this so it is diagnosable (issue #33).
-                    if (trackDuration > 60_000L && exoDuration > 0L) {
-                        val ratio = exoDuration.toDouble() / trackDuration.toDouble()
-                        if (ratio < 0.3 || ratio > 5.0) {
+                    // Detect preview / wrong-stream / still-growing-live-DASH-window situations:
+                    // if ExoPlayer reports a duration that dramatically differs from the track's
+                    // expected duration, the resolved stream is very likely a preview, a snippet,
+                    // or (most commonly for Tidal) a dynamic DASH manifest whose reported
+                    // duration is only the currently buffered window and will keep growing as
+                    // more segments load in. An implausibly short duration must not be trusted —
+                    // doing so previously flashed "00:02"-style durations at the user and then
+                    // poisoned the UI's cached "last valid duration" (issue #33).
+                    val ratio = if (trackDuration > 60_000L) exoDuration.toDouble() / trackDuration.toDouble() else 1.0
+                    val isImplausiblyShort = trackDuration > 60_000L && ratio < 0.3
+                    if (isImplausiblyShort) {
+                        Log.w(
+                            "PlayerViewModel",
+                            "Duration mismatch: ExoPlayer=${exoDuration}ms vs Track=${trackDuration}ms " +
+                                    "(ratio=${String.format("%.2f", ratio)}) for '${currentTrack?.title}' — " +
+                                    "ignoring implausibly short duration, likely a growing live/dynamic DASH window"
+                        )
+                        if (duration <= 0L) duration = trackDuration
+                    } else {
+                        if (trackDuration > 60_000L && ratio > 5.0) {
                             Log.w(
                                 "PlayerViewModel",
                                 "Duration mismatch: ExoPlayer=${exoDuration}ms vs Track=${trackDuration}ms " +
@@ -734,6 +747,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                                         "possible preview or wrong stream"
                             )
                         }
+                        duration = exoDuration
                     }
                 }
                 pendingSeekPosition?.let { MusicManager.player.seekTo(it); pendingSeekPosition = null }
@@ -4618,6 +4632,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             var lastAutomixCheckTime = 0L
             while (isActive && isPlaying) {
                 try {
+                    if (isLoading && MusicManager.player.playbackState == Player.STATE_READY) {
+                        // A STATE_BUFFERING -> STATE_READY transition can be missed by the
+                        // listener (e.g. during a DASH manifest refresh on Tidal/Deezer
+                        // streams), leaving isLoading stuck true forever and the seekbar frozen
+                        // at its last position even though the player is actually ready and
+                        // playing again. Self-heal from the player's real state every tick.
+                        isLoading = false
+                    }
                     if (!isScrubbing && !isLoading) {
                         currentPosition = MusicManager.player.currentPosition.coerceAtLeast(0L)
                         // Media milliseconds actually travelled, not seconds on the clock.

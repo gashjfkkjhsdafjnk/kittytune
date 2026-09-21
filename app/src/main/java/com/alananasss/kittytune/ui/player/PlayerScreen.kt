@@ -1413,6 +1413,9 @@ fun PlayerHeader(
             }
         }
 
+        IconButton(onClick = { viewModel.isDjModeActive = true }) {
+            Icon(Icons.Rounded.Album, stringResource(R.string.dj_mode_title), tint = contentColor)
+        }
         IconButton(onClick = { viewModel.currentTrack?.let { viewModel.showTrackOptions(it, fromPlayer = true) } }) {
             Icon(Icons.Default.MoreVert, stringResource(R.string.btn_options), tint = contentColor)
         }

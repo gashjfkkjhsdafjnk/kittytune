@@ -321,6 +321,10 @@
     <!-- ═══════════════════════════════════════════════════════════════════════════════ -->
 
     <string name="player_playing_now">WIRD GERADE ABGESPIELT</string>
+    <string name="dj_mode_title">DJ-Modus</string>
+    <string name="dj_mode_bpm">%1$d BPM</string>
+    <string name="dj_mode_bpm_estimated">~%1$d BPM (geschätzt)</string>
+    <string name="dj_mode_analyzing">Beat wird analysiert…</string>
     <string name="player_queue">Warteschlange</string>
     <string name="queue_shuffle">Zufallswiedergabe</string>
     <string name="queue_repeat">Wiederholen</string>

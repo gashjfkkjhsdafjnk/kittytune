@@ -1611,6 +1611,18 @@ fun MainScreen(
         }
 
         AnimatedVisibility(
+            visible = playerViewModel.isDjModeActive,
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(250)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            com.alananasss.kittytune.ui.player.djmode.DjModeScreen(
+                viewModel = playerViewModel,
+                onClose = { playerViewModel.isDjModeActive = false }
+            )
+        }
+
+        AnimatedVisibility(
             visible = playerViewModel.showLyricsSheet,
             enter = slideInVertically(
                 initialOffsetY = { it },
