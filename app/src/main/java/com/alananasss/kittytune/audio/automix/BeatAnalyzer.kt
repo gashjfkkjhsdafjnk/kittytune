@@ -39,6 +39,8 @@ object BeatAnalyzer {
         /** 0=C, 1=C#, ... 11=B. Null when the chroma signal was too weak to call a key. */
         val keyPitchClass: Int? = null,
         val keyIsMinor: Boolean? = null,
+        /** 0..1 loudness-driven energy proxy of the analyzed window. See [energyLevelFrom]. */
+        val energyLevel: Float? = null,
     )
 
     private const val TAG = "BeatAnalyzer"
@@ -147,11 +149,9 @@ object BeatAnalyzer {
         val firstBeatOffsetMs = (anchorMs % periodMs.roundToLong() + periodMs.roundToLong()) % periodMs.roundToLong()
 
         // 2. Mix-in point from the decoded samples
-        val mixInPointMs = detectMixIn(
-            energyEnvelope(pcm.samples, pcm.sampleRate),
-            firstBeatOffsetMs,
-            periodMs
-        )
+        val headEnv = energyEnvelope(pcm.samples, pcm.sampleRate)
+        val mixInPointMs = detectMixIn(headEnv, firstBeatOffsetMs, periodMs)
+        val energyLevel = energyLevelFrom(headEnv, bpm)
 
         // 3. Mix-out point from track outro (if duration is known and track is long enough)
         var mixOutPointMs: Long? = null
@@ -178,7 +178,7 @@ object BeatAnalyzer {
             }
         }
 
-        val result = Result(bpm, firstBeatOffsetMs, confidence, mixInPointMs, mixOutPointMs, key?.first, key?.second)
+        val result = Result(bpm, firstBeatOffsetMs, confidence, mixInPointMs, mixOutPointMs, key?.first, key?.second, energyLevel)
         return CachedAnalysis(result, complete = true)
     }
 
@@ -429,7 +429,8 @@ object BeatAnalyzer {
                 }
             }
 
-            return Result(bpm, firstBeatOffsetMs, confidence, mixInPointMs, mixOutPointMs, key?.first, key?.second)
+            val energyLevel = energyLevelFrom(energyEnvelope(pcm.samples, pcm.sampleRate), bpm)
+            return Result(bpm, firstBeatOffsetMs, confidence, mixInPointMs, mixOutPointMs, key?.first, key?.second, energyLevel)
         } catch (e: Exception) {
             Log.w(TAG, "Beat analysis failed: ${e.message}")
             return null
@@ -561,6 +562,22 @@ object BeatAnalyzer {
         if (values.isEmpty()) return 0f
         val sorted = values.sorted()
         return sorted[((sorted.size - 1) * p).roundToInt().coerceIn(0, sorted.size - 1)]
+    }
+
+    /**
+     * 0..1 "how intense does this track feel" proxy: mostly the analyzed window's body
+     * loudness (the same 75th-percentile RMS reference already used for mix-in/out detection,
+     * log-compressed into a -40..0 dBFS range), with a small tempo contribution folded in since
+     * faster material reads as more energetic even at equal loudness. This is a heuristic, not a
+     * real dynamics/spectral analysis - good enough to rank tracks relative to each other for
+     * planning a set's energy arc, not meant as an absolute loudness measurement.
+     */
+    private fun energyLevelFrom(env: FloatArray, bpm: Float): Float {
+        val ref = percentile(env, 0.75f)
+        val db = 20.0 * ln(ref.toDouble().coerceAtLeast(1e-6)) / ln(10.0)
+        val loudnessScore = ((db + 40.0) / 40.0).coerceIn(0.0, 1.0)
+        val bpmScore = ((bpm - MIN_CANONICAL_BPM) / (MAX_CANONICAL_BPM - MIN_CANONICAL_BPM)).coerceIn(0f, 1f)
+        return (0.7 * loudnessScore + 0.3 * bpmScore.toDouble()).toFloat().coerceIn(0f, 1f)
     }
 
     /**

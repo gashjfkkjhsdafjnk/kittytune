@@ -187,4 +187,130 @@ object DjEngine {
 
         return results.sortedByDescending { it.score }.take(maxResults)
     }
+
+    /** Desired energy trajectory for [planSequence] - build up, wind down, or keep it smooth (no strong bias either way). */
+    enum class EnergyDirection { BUILD, WIND_DOWN, SMOOTH }
+
+    data class SequenceStep(
+        val track: Track,
+        val bpm: Float,
+        val camelot: CamelotKey?,
+        val energyLevel: Float?,
+        val transitionScore: Float,
+        val energyFitScore: Float,
+        val combinedScore: Float,
+        val fromQueue: Boolean,
+        val queuePosition: Int? = null,
+    )
+
+    data class SequencePlan(
+        val direction: EnergyDirection,
+        val steps: List<SequenceStep>,
+        val score: Float,
+    )
+
+    /**
+     * Looks two tracks ahead instead of judging only the very next transition: searches the
+     * candidate pool for the pair of upcoming tracks whose combined tempo/key compatibility
+     * *and* energy trajectory best match [direction] - e.g. for BUILD, each step should feel a
+     * little more intense than the last, not just individually mix well. Pool size is capped
+     * (~40 candidates), so the full pairwise search is cheap (at most ~1600 comparisons).
+     */
+    suspend fun planSequence(
+        context: Context,
+        currentTrack: Track,
+        currentBeat: BeatInfoEntity,
+        pool: List<Track>,
+        queueLookahead: List<Track>,
+        direction: EnergyDirection,
+        depth: Int = 2,
+    ): SequencePlan {
+        if (pool.isEmpty() || currentBeat.bpm <= 0f) return SequencePlan(direction, emptyList(), 0f)
+        val db = AppDatabase.getDatabase(context)
+        val ids = pool.map { it.id.toString() }
+        val beatById = withContext(Dispatchers.IO) { db.beatInfoDao().getBeatInfoForSongs(ids) }
+            .associateBy { it.songId }
+        val queuePositions = queueLookahead.withIndex().associate { (i, t) -> t.id to (i + 1) }
+        val currentCamelot = currentBeat.keyPitchClass?.let { pc -> toCamelot(pc, currentBeat.keyIsMinor == true) }
+
+        data class Candidate(val track: Track, val beat: BeatInfoEntity, val camelot: CamelotKey?)
+
+        val candidates = pool.mapNotNull { t ->
+            val b = beatById[t.id.toString()] ?: return@mapNotNull null
+            if (b.bpm <= 0f || b.confidence < 0.25f) return@mapNotNull null
+            Candidate(t, b, b.keyPitchClass?.let { pc -> toCamelot(pc, b.keyIsMinor == true) })
+        }
+        if (candidates.isEmpty()) return SequencePlan(direction, emptyList(), 0f)
+
+        fun transitionScore(fromBpm: Float, fromCamelot: CamelotKey?, fromTrack: Track, to: Candidate): Float {
+            val tempo = tempoCompatibility(fromBpm, to.beat.bpm)
+            val key = if (fromCamelot != null && to.camelot != null) camelotCompatibility(fromCamelot, to.camelot) else 0.5f
+            val genre = if (!fromTrack.genre.isNullOrBlank() && fromTrack.genre == to.track.genre) 0.06f else 0f
+            val popularity = (min(to.track.likesCount, 50_000) / 50_000f) * 0.04f
+            return (tempo * 0.5f + key * 0.36f + genre + popularity).coerceIn(0f, 1f)
+        }
+
+        fun energyFit(fromEnergy: Float?, toEnergy: Float?): Float {
+            if (fromEnergy == null || toEnergy == null) return 0.5f
+            val delta = toEnergy - fromEnergy
+            return when (direction) {
+                EnergyDirection.BUILD -> when {
+                    delta in 0.02f..0.30f -> 1f
+                    delta > 0.30f -> (1f - (delta - 0.30f) / 0.4f).coerceIn(0.3f, 1f)
+                    delta in -0.05f..0.02f -> 0.6f
+                    else -> (1f + delta * 2f).coerceIn(0f, 0.5f)
+                }
+                EnergyDirection.WIND_DOWN -> when {
+                    delta in -0.30f..-0.02f -> 1f
+                    delta < -0.30f -> (1f - (-delta - 0.30f) / 0.4f).coerceIn(0.3f, 1f)
+                    delta in -0.02f..0.05f -> 0.6f
+                    else -> (1f - delta * 2f).coerceIn(0f, 0.5f)
+                }
+                EnergyDirection.SMOOTH -> (1f - abs(delta) / 0.25f).coerceIn(0f, 1f)
+            }
+        }
+
+        fun step(fromBpm: Float, fromCamelot: CamelotKey?, fromTrack: Track, fromEnergy: Float?, to: Candidate): SequenceStep {
+            val transition = transitionScore(fromBpm, fromCamelot, fromTrack, to)
+            val energy = energyFit(fromEnergy, to.beat.energyLevel)
+            return SequenceStep(
+                track = to.track,
+                bpm = to.beat.bpm,
+                camelot = to.camelot,
+                energyLevel = to.beat.energyLevel,
+                transitionScore = transition,
+                energyFitScore = energy,
+                combinedScore = (transition * 0.65f + energy * 0.35f).coerceIn(0f, 1f),
+                fromQueue = queuePositions.containsKey(to.track.id),
+                queuePosition = queuePositions[to.track.id],
+            )
+        }
+
+        var bestSteps: List<SequenceStep> = emptyList()
+        var bestScore = -1f
+
+        for (c1 in candidates) {
+            val step1 = step(currentBeat.bpm, currentCamelot, currentTrack, currentBeat.energyLevel, c1)
+
+            if (depth <= 1) {
+                if (step1.combinedScore > bestScore) {
+                    bestScore = step1.combinedScore
+                    bestSteps = listOf(step1)
+                }
+                continue
+            }
+
+            for (c2 in candidates) {
+                if (c2.track.id == c1.track.id) continue
+                val step2 = step(c1.beat.bpm, c1.camelot, c1.track, c1.beat.energyLevel, c2)
+                val avg = (step1.combinedScore + step2.combinedScore) / 2f
+                if (avg > bestScore) {
+                    bestScore = avg
+                    bestSteps = listOf(step1, step2)
+                }
+            }
+        }
+
+        return SequencePlan(direction, bestSteps, bestScore.coerceAtLeast(0f))
+    }
 }

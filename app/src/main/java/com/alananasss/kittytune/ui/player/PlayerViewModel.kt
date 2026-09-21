@@ -3841,16 +3841,26 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         isDjMixingToNext = true
         viewModelScope.launch {
             try {
+                // Prefer the two-ahead sequence plan's first step over a flat "what mixes
+                // well right now" pick - it already accounts for the track after that one
+                // fitting the chosen energy arc, not just this single transition.
                 val suggestions = com.alananasss.kittytune.audio.automix.DjSessionController.suggestions.value
+                val sequencePlan = com.alananasss.kittytune.audio.automix.DjSessionController.sequencePlan.value
                 val naturalNext = _queue.getOrNull(currentQueueIndex + 1)
-                val naturalNextScore = suggestions.firstOrNull { it.track.id == naturalNext?.id }?.score
-                val best = suggestions.maxByOrNull { it.score }
-                if (best != null && !best.fromQueue &&
-                    (naturalNextScore == null || best.score > naturalNextScore + 0.08f)
+                val naturalNextScore = suggestions.firstOrNull { it.track.id == naturalNext?.id }?.score ?: 0f
+
+                val sequenceStep1 = sequencePlan?.steps?.firstOrNull()
+                val flatBest = suggestions.maxByOrNull { it.score }
+                val pickedTrack = sequenceStep1?.track ?: flatBest?.track
+                val pickedScore = sequenceStep1?.combinedScore ?: flatBest?.score ?: 0f
+
+                if (pickedTrack != null && pickedTrack.id != naturalNext?.id &&
+                    pickedScore > naturalNextScore + 0.08f
                 ) {
-                    // A favorite mixes in noticeably better than whatever was next in
-                    // the plain queue - swap it in before we transition.
-                    com.alananasss.kittytune.audio.automix.DjSessionController.mixIn(best.track)
+                    // Mixes in noticeably better than whatever was next in the plain queue
+                    // (or, with an energy direction set, keeps the set's arc on track) -
+                    // swap it in before we transition.
+                    com.alananasss.kittytune.audio.automix.DjSessionController.mixIn(pickedTrack)
                 }
 
                 val nextTrack = _queue.getOrNull(currentQueueIndex + 1)

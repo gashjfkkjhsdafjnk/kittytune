@@ -339,6 +339,10 @@
     <string name="dj_mode_reason_key_energy">energy shift (%1$s)</string>
     <string name="dj_mode_reason_key_plain">%1$s</string>
     <string name="dj_mode_reason_same_genre">same genre</string>
+    <string name="dj_mode_energy_build">Build up</string>
+    <string name="dj_mode_energy_smooth">Hold</string>
+    <string name="dj_mode_energy_wind_down">Wind down</string>
+    <string name="dj_mode_arc_now">Now</string>
     <string name="player_queue">Queue</string>
     <string name="queue_shuffle">Shuffle</string>
     <string name="queue_repeat">Repeat</string>

@@ -469,7 +469,7 @@
             TrackTrimRow::class,
             BeatInfoEntity::class
         ],
-        version = 21,
+        version = 22,
         exportSchema = false
     )
     abstract class AppDatabase : RoomDatabase() {
@@ -549,6 +549,16 @@
                 }
             }
 
+            /**
+             * Per-track energy proxy (loudness + tempo blend) so DJ Mode can plan a multi-track
+             * energy arc instead of only judging the very next transition.
+             */
+            val MIGRATION_21_22 = object : Migration(21, 22) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE beat_info ADD COLUMN energyLevel REAL")
+                }
+            }
+
             @Volatile private var INSTANCE: AppDatabase? = null
             fun getDatabase(context: Context): AppDatabase {
                 return INSTANCE ?: synchronized(this) {
@@ -557,7 +567,7 @@
                         AppDatabase::class.java,
                         "soundtune_db"
                     )
-                        .addMigrations(MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
+                        .addMigrations(MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22)
                         .fallbackToDestructiveMigration()
                         .build()
                     INSTANCE = instance

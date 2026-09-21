@@ -2,10 +2,12 @@ package com.alananasss.kittytune.ui.player.djmode
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +30,10 @@ import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.TrendingDown
+import androidx.compose.material.icons.rounded.TrendingFlat
+import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -76,6 +83,8 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
     val beatInfo by DjSessionController.currentBeatInfo.collectAsStateWithLifecycle()
     val loopState by DjSessionController.loopState.collectAsStateWithLifecycle()
     val suggestions by DjSessionController.suggestions.collectAsStateWithLifecycle()
+    val energyDirection by DjSessionController.energyDirection.collectAsStateWithLifecycle()
+    val sequencePlan by DjSessionController.sequencePlan.collectAsStateWithLifecycle()
     val isEstimated = (beatInfo?.confidence ?: 1f) <= 0f
     var pulseTick by remember(track?.id) { mutableIntStateOf(0) }
 
@@ -256,6 +265,23 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                 loopEnabled = beatInfo != null,
             )
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            EnergyDirectionRow(
+                direction = energyDirection,
+                onSelect = { DjSessionController.setEnergyDirection(it) },
+            )
+
+            val activeSequencePlan = sequencePlan
+            if (activeSequencePlan != null && activeSequencePlan.steps.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                SequenceArcRow(
+                    currentEnergy = beatInfo?.energyLevel,
+                    plan = activeSequencePlan,
+                    onMixInFirstStep = { DjSessionController.mixIn(it) },
+                )
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             SuggestionsSection(
@@ -319,7 +345,11 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
 
 @Composable
 private fun LoopControlsRow(loopState: DjSessionController.LoopState, loopEnabled: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         DjChip(
             label = if (loopState.active) {
                 stringResource(R.string.dj_mode_loop_bars, loopState.bars)
@@ -344,6 +374,105 @@ private fun LoopControlsRow(loopState: DjSessionController.LoopState, loopEnable
             )
         }
     }
+}
+
+@Composable
+private fun EnergyDirectionRow(
+    direction: DjEngine.EnergyDirection,
+    onSelect: (DjEngine.EnergyDirection) -> Unit,
+) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        DjChip(
+            label = stringResource(R.string.dj_mode_energy_build),
+            icon = Icons.Rounded.TrendingUp,
+            highlighted = direction == DjEngine.EnergyDirection.BUILD,
+            onClick = { onSelect(DjEngine.EnergyDirection.BUILD) },
+        )
+        DjChip(
+            label = stringResource(R.string.dj_mode_energy_smooth),
+            icon = Icons.Rounded.TrendingFlat,
+            highlighted = direction == DjEngine.EnergyDirection.SMOOTH,
+            onClick = { onSelect(DjEngine.EnergyDirection.SMOOTH) },
+        )
+        DjChip(
+            label = stringResource(R.string.dj_mode_energy_wind_down),
+            icon = Icons.Rounded.TrendingDown,
+            highlighted = direction == DjEngine.EnergyDirection.WIND_DOWN,
+            onClick = { onSelect(DjEngine.EnergyDirection.WIND_DOWN) },
+        )
+    }
+}
+
+/** Compact "current -> next -> next-next" preview of the planned energy arc. Tap mixes in the first step. */
+@Composable
+private fun SequenceArcRow(
+    currentEnergy: Float?,
+    plan: DjEngine.SequencePlan,
+    onMixInFirstStep: (com.alananasss.kittytune.domain.Track) -> Unit,
+) {
+    val step1 = plan.steps.getOrNull(0)
+    val step2 = plan.steps.getOrNull(1)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .then(
+                if (step1 != null) Modifier.clickable { onMixInFirstStep(step1.track) } else Modifier
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        EnergyDot(energy = currentEnergy, label = stringResource(R.string.dj_mode_arc_now))
+        Icon(Icons.Rounded.ChevronRight, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+        EnergyDot(energy = step1?.energyLevel, label = step1?.track?.title)
+        if (step2 != null) {
+            Icon(Icons.Rounded.ChevronRight, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+            EnergyDot(energy = step2.energyLevel, label = step2.track.title, dim = true)
+        }
+    }
+}
+
+@Composable
+private fun RowScope.EnergyDot(energy: Float?, label: String?, dim: Boolean = false) {
+    val color = energyColor(energy)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = if (dim) 0.55f else 1f))
+        )
+        if (label != null) {
+            Spacer(modifier = Modifier.size(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = if (dim) 0.5f else 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Cool blue (low energy) to hot orange (high energy); gray when unknown. */
+private fun energyColor(energy: Float?): Color {
+    if (energy == null) return Color.White.copy(alpha = 0.35f)
+    val t = energy.coerceIn(0f, 1f)
+    val low = Color(0xFF4FA8FF)
+    val high = Color(0xFFFF6A3D)
+    return Color(
+        red = low.red + (high.red - low.red) * t,
+        green = low.green + (high.green - low.green) * t,
+        blue = low.blue + (high.blue - low.blue) * t,
+        alpha = 1f,
+    )
 }
 
 @Composable

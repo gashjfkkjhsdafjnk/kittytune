@@ -339,6 +339,10 @@
     <string name="dj_mode_reason_key_energy">Energy-Wechsel (%1$s)</string>
     <string name="dj_mode_reason_key_plain">%1$s</string>
     <string name="dj_mode_reason_same_genre">gleiches Genre</string>
+    <string name="dj_mode_energy_build">Aufbauen</string>
+    <string name="dj_mode_energy_smooth">Halten</string>
+    <string name="dj_mode_energy_wind_down">Abbauen</string>
+    <string name="dj_mode_arc_now">Jetzt</string>
     <string name="player_queue">Warteschlange</string>
     <string name="queue_shuffle">Zufallswiedergabe</string>
     <string name="queue_repeat">Wiederholen</string>

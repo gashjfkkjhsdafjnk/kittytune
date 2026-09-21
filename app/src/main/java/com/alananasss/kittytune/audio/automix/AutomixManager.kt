@@ -257,6 +257,7 @@ object AutomixManager {
             mixOutPointMs = result.mixOutPointMs ?: -1L,
             keyPitchClass = result.keyPitchClass,
             keyIsMinor = result.keyIsMinor,
+            energyLevel = result.energyLevel,
         )
 
         withContext(Dispatchers.IO) {

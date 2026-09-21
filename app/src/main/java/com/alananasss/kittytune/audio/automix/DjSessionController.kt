@@ -47,8 +47,19 @@ object DjSessionController {
     private val _suggestions = MutableStateFlow<List<DjEngine.DjSuggestion>>(emptyList())
     val suggestions = _suggestions.asStateFlow()
 
+    private val _energyDirection = MutableStateFlow(DjEngine.EnergyDirection.SMOOTH)
+    val energyDirection = _energyDirection.asStateFlow()
+
+    private val _sequencePlan = MutableStateFlow<DjEngine.SequencePlan?>(null)
+    val sequencePlan = _sequencePlan.asStateFlow()
+
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing = _isAnalyzing.asStateFlow()
+
+    /** Changes the desired set-energy arc (build up / wind down / keep smooth); re-planned on the next tick. */
+    fun setEnergyDirection(direction: DjEngine.EnergyDirection) {
+        _energyDirection.value = direction
+    }
 
     // beatInfoLoop() and suggestionsLoop() run as separate coroutines on Dispatchers.Default
     // (potentially different threads), so this needs to be safe for concurrent add/read.
@@ -81,6 +92,7 @@ object DjSessionController {
         onMixIn = null
         _loopState.value = LoopState()
         _suggestions.value = emptyList()
+        _sequencePlan.value = null
         _currentBeatInfo.value = null
         _isAnalyzing.value = false
     }
@@ -223,6 +235,9 @@ object DjSessionController {
                         excludeIds = sessionPlayedIds + t.id,
                     )
                     _suggestions.value = DjEngine.rankCandidates(ctx, t, beat, pool, lookahead)
+                    _sequencePlan.value = DjEngine.planSequence(
+                        ctx, t, beat, pool, lookahead, _energyDirection.value,
+                    )
                     DjEngine.warmUpAnalysis(ctx, pool)
                 } catch (e: Exception) {
                     Log.w(TAG, "Suggestion ranking failed: ${e.message}")
