@@ -3807,6 +3807,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         emitUiEvent(getString(R.string.menu_play_next))
     }
 
+    fun enterDjMode() {
+        isDjModeActive = true
+        com.alananasss.kittytune.audio.automix.DjSessionController.start(
+            context = context,
+            queueLookahead = { _queue.drop(currentQueueIndex + 1).take(10) },
+            onMixIn = { track -> insertNext(listOf(track)) },
+        )
+    }
+
+    fun exitDjMode() {
+        isDjModeActive = false
+        com.alananasss.kittytune.audio.automix.DjSessionController.stop()
+    }
+
     fun togglePlayPause() {
         com.alananasss.kittytune.audio.haptics.PlayerHapticManager.triggerInteractionHaptic(
             context,

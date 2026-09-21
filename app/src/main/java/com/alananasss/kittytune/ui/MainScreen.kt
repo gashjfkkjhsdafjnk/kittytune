@@ -1618,7 +1618,7 @@ fun MainScreen(
         ) {
             com.alananasss.kittytune.ui.player.djmode.DjModeScreen(
                 viewModel = playerViewModel,
-                onClose = { playerViewModel.isDjModeActive = false }
+                onClose = { playerViewModel.exitDjMode() }
             )
         }
 

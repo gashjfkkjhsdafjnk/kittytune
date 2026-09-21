@@ -1413,7 +1413,7 @@ fun PlayerHeader(
             }
         }
 
-        IconButton(onClick = { viewModel.isDjModeActive = true }) {
+        IconButton(onClick = { viewModel.enterDjMode() }) {
             Icon(Icons.Rounded.Album, stringResource(R.string.dj_mode_title), tint = contentColor)
         }
         IconButton(onClick = { viewModel.currentTrack?.let { viewModel.showTrackOptions(it, fromPlayer = true) } }) {
@@ -12183,6 +12183,22 @@ fun SoundCloudPlayerView(
                             tint = Color.Black,
                             modifier = Modifier.size(24.dp)
                         )
+                    }
+                    if (isCurrentPage) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xE6FFFFFF), CircleShape)
+                                .clickable { viewModel.enterDjMode() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Album,
+                                contentDescription = stringResource(R.string.dj_mode_title),
+                                tint = Color.Black,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                     val artistSavedEntity by remember(pageTrack.user?.id) {
                         val uid = pageTrack.user?.id

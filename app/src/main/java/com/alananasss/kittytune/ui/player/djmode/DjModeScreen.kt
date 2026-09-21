@@ -1,25 +1,33 @@
 package com.alananasss.kittytune.ui.player.djmode
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +36,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,12 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -51,15 +58,11 @@ import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.rememberLottieAnimatable
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.alananasss.kittytune.R
-import com.alananasss.kittytune.audio.automix.AutomixManager
-import com.alananasss.kittytune.audio.automix.BeatAnalysisPriority
-import com.alananasss.kittytune.data.local.AppDatabase
-import com.alananasss.kittytune.data.local.BeatInfoEntity
+import com.alananasss.kittytune.audio.automix.DjEngine
+import com.alananasss.kittytune.audio.automix.DjSessionController
 import com.alananasss.kittytune.ui.player.PlayerViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
 
 /**
  * Fun, low-stakes "DJ mode": the app mascot dances along with the detected
@@ -68,37 +71,13 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
-    val context = LocalContext.current
     val track = viewModel.currentTrack
 
-    var beatInfo by remember(track?.id) { mutableStateOf<BeatInfoEntity?>(null) }
-    var isEstimated by remember(track?.id) { mutableStateOf(false) }
+    val beatInfo by DjSessionController.currentBeatInfo.collectAsStateWithLifecycle()
+    val loopState by DjSessionController.loopState.collectAsStateWithLifecycle()
+    val suggestions by DjSessionController.suggestions.collectAsStateWithLifecycle()
+    val isEstimated = (beatInfo?.confidence ?: 1f) <= 0f
     var pulseTick by remember(track?.id) { mutableIntStateOf(0) }
-
-    LaunchedEffect(track?.id) {
-        val t = track ?: return@LaunchedEffect
-        val db = AppDatabase.getDatabase(context)
-        val songId = t.id.toString()
-        var attempts = 0
-        while (isActive && attempts < 25) {
-            val cached = withContext(Dispatchers.IO) { db.beatInfoDao().getBeatInfo(songId) }
-            if (cached != null && cached.bpm > 0f) {
-                beatInfo = cached
-                isEstimated = false
-                return@LaunchedEffect
-            }
-            AutomixManager.maybeAnalyzeBeat(t, BeatAnalysisPriority.IMMEDIATE)
-            attempts++
-            delay(1000)
-        }
-        // No real analysis available (unsupported source, timed out, etc.) —
-        // keep the cat moving with a plausible default so DJ mode never just
-        // sits there frozen.
-        if (isActive && beatInfo == null) {
-            beatInfo = BeatInfoEntity(songId = songId, bpm = 96f, firstBeatOffsetMs = 0L, confidence = 0f)
-            isEstimated = true
-        }
-    }
 
     LaunchedEffect(beatInfo?.bpm, viewModel.isPlaying, track?.id) {
         val info = beatInfo
@@ -185,11 +164,11 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                 Spacer(modifier = Modifier.size(48.dp))
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Box(
                 modifier = Modifier
-                    .size(280.dp)
+                    .size(200.dp)
                     .clip(CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -213,18 +192,18 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                     LottieAnimation(
                         composition = danceComposition,
                         progress = { danceAnimatable.value },
-                        modifier = Modifier.size(220.dp)
+                        modifier = Modifier.size(160.dp)
                     )
                 } else {
                     LottieAnimation(
                         composition = idleComposition,
                         iterations = LottieConstants.IterateForever,
-                        modifier = Modifier.size(220.dp)
+                        modifier = Modifier.size(160.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = track?.title ?: stringResource(R.string.player_playing_now),
@@ -270,7 +249,23 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            LoopControlsRow(
+                loopState = loopState,
+                loopEnabled = beatInfo != null,
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            SuggestionsSection(
+                suggestions = suggestions,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -302,4 +297,190 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun LoopControlsRow(loopState: DjSessionController.LoopState, loopEnabled: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        DjChip(
+            label = if (loopState.active) {
+                stringResource(R.string.dj_mode_loop_bars, loopState.bars)
+            } else {
+                stringResource(R.string.dj_mode_loop)
+            },
+            icon = if (loopState.active) Icons.Rounded.Stop else Icons.Rounded.Repeat,
+            highlighted = loopState.active,
+            enabled = loopEnabled,
+            onClick = { DjSessionController.toggleLoop() },
+        )
+        if (loopState.active) {
+            DjChip(
+                label = "½",
+                enabled = loopState.bars > 1,
+                onClick = { DjSessionController.halveLoop() },
+            )
+            DjChip(
+                label = "×2",
+                enabled = loopState.bars < 32,
+                onClick = { DjSessionController.doubleLoop() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DjChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    highlighted: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (highlighted) Color.White else Color.White.copy(alpha = 0.14f))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (highlighted) Color.Black else Color.White.copy(alpha = if (enabled) 0.9f else 0.4f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.size(6.dp))
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = if (highlighted) Color.Black else Color.White.copy(alpha = if (enabled) 0.9f else 0.4f),
+        )
+    }
+}
+
+@Composable
+private fun SuggestionsSection(suggestions: List<DjEngine.DjSuggestion>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.dj_mode_next_up),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        if (suggestions.isEmpty()) {
+            Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.dj_mode_suggestions_loading),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                )
+            }
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                items(suggestions, key = { it.track.id }) { suggestion ->
+                    SuggestionCard(suggestion)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionCard(suggestion: DjEngine.DjSuggestion) {
+    val track = suggestion.track
+    Column(
+        modifier = Modifier
+            .width(150.dp)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .clickable { DjSessionController.mixIn(track) }
+            .padding(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(90.dp)
+                .clip(RoundedCornerShape(10.dp))
+        ) {
+            val art = track.fullResArtwork
+            if (art.isNotBlank()) {
+                AsyncImage(
+                    model = art,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray))
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = track.title ?: "",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = track.displayArtist,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.6f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = if (suggestion.fromQueue) {
+                stringResource(R.string.dj_mode_in_queue, suggestion.queuePosition ?: 0)
+            } else {
+                stringResource(R.string.dj_mode_from_favorites)
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF8BE28B),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = suggestionReasonText(suggestion),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.55f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun suggestionReasonText(suggestion: DjEngine.DjSuggestion): String {
+    val bpmInt = suggestion.bpm.toInt()
+    val parts = ArrayList<String>(3)
+    parts += when {
+        suggestion.tempoScore > 0.9f -> stringResource(R.string.dj_mode_reason_tempo_perfect, bpmInt)
+        suggestion.tempoScore > 0.6f -> stringResource(R.string.dj_mode_reason_tempo_close, bpmInt)
+        else -> stringResource(R.string.dj_mode_reason_tempo_plain, bpmInt)
+    }
+    val camelot = suggestion.camelot
+    if (camelot != null) {
+        val code = camelot.toString()
+        parts += when {
+            suggestion.keyScore >= 0.9f -> stringResource(R.string.dj_mode_reason_key_perfect, code)
+            suggestion.keyScore >= 0.75f -> stringResource(R.string.dj_mode_reason_key_compatible, code)
+            suggestion.keyScore >= 0.5f -> stringResource(R.string.dj_mode_reason_key_energy, code)
+            else -> stringResource(R.string.dj_mode_reason_key_plain, code)
+        }
+    }
+    if (suggestion.genreMatch) parts += stringResource(R.string.dj_mode_reason_same_genre)
+    return parts.joinToString(" · ")
 }
