@@ -130,6 +130,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     var isPlayerExpanded by mutableStateOf(false)
     var isSidePlayerOpen by mutableStateOf(false)
     var isDjModeActive by mutableStateOf(false)
+    var isDjMixingToNext by mutableStateOf(false)
     var isTabletSplitMode by mutableStateOf(true)
     var isLiked by mutableStateOf(false)
     var backgroundColor by mutableStateOf(Color(0xFF1E1E1E))
@@ -3819,6 +3820,72 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun exitDjMode() {
         isDjModeActive = false
         com.alananasss.kittytune.audio.automix.DjSessionController.stop()
+    }
+
+    /**
+     * DJ Mode's "next" button: never a hard cut. Picks the smartest next track
+     * (a strong DJ-engine suggestion from favorites beats a mediocre queue-next),
+     * makes sure a tempo/key-matched transition plan exists for that pair, then
+     * lands the crossfade on the outgoing track's next beat instead of firing at
+     * a random mid-phrase instant - the same feel as a real DJ cueing a mix in.
+     */
+    fun djMixToNext() {
+        if (isDjMixingToNext) return
+        val current = currentTrack
+        if (current == null) {
+            playNext(manual = true, isCrossfade = true)
+            return
+        }
+        val beat = com.alananasss.kittytune.audio.automix.DjSessionController.currentBeatInfo.value
+
+        isDjMixingToNext = true
+        viewModelScope.launch {
+            try {
+                val suggestions = com.alananasss.kittytune.audio.automix.DjSessionController.suggestions.value
+                val naturalNext = _queue.getOrNull(currentQueueIndex + 1)
+                val naturalNextScore = suggestions.firstOrNull { it.track.id == naturalNext?.id }?.score
+                val best = suggestions.maxByOrNull { it.score }
+                if (best != null && !best.fromQueue &&
+                    (naturalNextScore == null || best.score > naturalNextScore + 0.08f)
+                ) {
+                    // A favorite mixes in noticeably better than whatever was next in
+                    // the plain queue - swap it in before we transition.
+                    com.alananasss.kittytune.audio.automix.DjSessionController.mixIn(best.track)
+                }
+
+                val nextTrack = _queue.getOrNull(currentQueueIndex + 1)
+                if (nextTrack != null) {
+                    val dur = MusicManager.player.duration.takeIf { it > 0 } ?: (current.durationMs ?: 0L)
+                    if (dur > 0L) {
+                        // DJ Mode has been warming up beat analysis for this pair in the
+                        // background since it opened, so this almost always resolves on
+                        // the first pass; the loop only matters for a very fresh pick.
+                        var attempts = 0
+                        while (attempts < 15 && isActive) {
+                            val result = com.alananasss.kittytune.audio.automix.AutomixManager.computeAutomixPlan(
+                                current, nextTrack, currentPosition, dur, playerPrefs
+                            )
+                            if (result.plan != null || result.pairAnalyzed) break
+                            attempts++
+                            delay(400)
+                        }
+                    }
+                }
+
+                if (beat != null && beat.bpm > 0f) {
+                    val periodMs = 60_000.0 / beat.bpm
+                    val beatsFromAnchor = (currentPosition - beat.firstBeatOffsetMs) / periodMs
+                    val nextBeatIdx = kotlin.math.ceil(beatsFromAnchor)
+                    val nextBeatMs = beat.firstBeatOffsetMs + nextBeatIdx * periodMs
+                    val waitMs = (nextBeatMs - currentPosition).toLong().coerceIn(0L, 1500L)
+                    if (waitMs > 0L) delay(waitMs)
+                }
+
+                playNext(manual = true, isCrossfade = true)
+            } finally {
+                isDjMixingToNext = false
+            }
+        }
     }
 
     fun togglePlayPause() {

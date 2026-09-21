@@ -291,8 +291,26 @@ fun DjModeScreen(viewModel: PlayerViewModel, onClose: () -> Unit) {
                     )
                 }
                 Spacer(modifier = Modifier.size(24.dp))
-                IconButton(onClick = { viewModel.playNext(manual = true) }, modifier = Modifier.size(56.dp)) {
-                    Icon(Icons.Rounded.SkipNext, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    IconButton(
+                        onClick = { viewModel.djMixToNext() },
+                        enabled = !viewModel.isDjMixingToNext,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.SkipNext,
+                            null,
+                            tint = if (viewModel.isDjMixingToNext) Color.White.copy(alpha = 0.35f) else Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    if (viewModel.isDjMixingToNext) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(44.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    }
                 }
             }
         }
