@@ -173,6 +173,19 @@ object MusicManager {
 
     private val eightDProcessors = listOf(EightDAudioProcessor(), EightDAudioProcessor())
     private val fxProcessors = listOf(FxAudioProcessor(), FxAudioProcessor())
+
+    /**
+     * One per player, so a transition can work the outgoing track while the incoming one plays
+     * clean - which is how the two are told apart by ear during an overlap.
+     */
+    val remixProcessors = listOf(
+        com.alananasss.kittytune.ui.player.audio.RemixAudioProcessor(),
+        com.alananasss.kittytune.ui.player.audio.RemixAudioProcessor(),
+    )
+
+    /** The director for whichever player is currently active. */
+    val activeRemixProcessor: com.alananasss.kittytune.ui.player.audio.RemixAudioProcessor
+        get() = remixProcessors[if (activePlayerIndex == 1) 0 else 1]
     private val reverbProcessors = listOf(ReverbAudioProcessor(), ReverbAudioProcessor())
     private val earrapeProcessors = listOf(EarrapeAudioProcessor(), EarrapeAudioProcessor())
     private val monoProcessors = listOf(MonoAudioProcessor(), MonoAudioProcessor())
@@ -411,7 +424,7 @@ object MusicManager {
                             val hapticProc = hapticProcessors?.getOrNull(index) ?: com.alananasss.kittytune.audio.haptics.HapticAudioProcessor(context)
                             val duckProc = automixDuckProcessors.getOrNull(index) ?: com.alananasss.kittytune.audio.automix.AutomixDuckAudioProcessor()
                             return DefaultAudioSink.Builder(context)
-                                .setAudioProcessors(arrayOf(hapticProc, duckProc, vocalRemoverProcessors[index], vocalBoostProcessors[index], tapeSaturationProcessors[index], subOctaverProcessors[index], chorusProcessors[index], flangerProcessors[index], phaserProcessors[index], rotarySpeakerProcessors[index], robotVocoderProcessors[index], tranceGateProcessors[index], underwaterProcessors[index], partyNextDoorProcessors[index], emptyMallProcessors[index], superWideProcessors[index], pingPongDelayProcessors[index], reverseEchoProcessors[index], fxProcessors[index], reverbProcessors[index], shimmerReverbProcessors[index], eightDProcessors[index], earrapeProcessors[index], monoProcessors[index], normalizerProcessors[index], vinylLoFiProcessors[index], gramophoneProcessors[index], megaphoneProcessors[index], chiptuneProcessors[index], vintageMp3Processors[index]))
+                                .setAudioProcessors(arrayOf(hapticProc, duckProc, vocalRemoverProcessors[index], vocalBoostProcessors[index], tapeSaturationProcessors[index], subOctaverProcessors[index], chorusProcessors[index], flangerProcessors[index], phaserProcessors[index], rotarySpeakerProcessors[index], robotVocoderProcessors[index], tranceGateProcessors[index], underwaterProcessors[index], partyNextDoorProcessors[index], emptyMallProcessors[index], superWideProcessors[index], pingPongDelayProcessors[index], reverseEchoProcessors[index], remixProcessors[index], fxProcessors[index], reverbProcessors[index], shimmerReverbProcessors[index], eightDProcessors[index], earrapeProcessors[index], monoProcessors[index], normalizerProcessors[index], vinylLoFiProcessors[index], gramophoneProcessors[index], megaphoneProcessors[index], chiptuneProcessors[index], vintageMp3Processors[index]))
                                 .setEnableFloatOutput(enableFloatOutput)
                                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                                 .build()

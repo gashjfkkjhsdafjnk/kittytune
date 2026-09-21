@@ -584,12 +584,60 @@ fun HomeContent(
     )
     val remainingSections = allSections.filter { !usedSections.contains(it) }
 
+    // Shared by the prompt card and the entry chips below it, which both start a mix and both
+    // have to ask the mode question first when it has never been answered.
+    val remixPrefs = remember { com.alananasss.kittytune.data.local.PlayerPreferences(context) }
+    var remixModeReport by remember {
+        mutableStateOf<com.alananasss.kittytune.data.remix.RemixCapabilities.Report?>(null)
+    }
+
     LazyColumn(
         state = scrollState,
         contentPadding = PaddingValues(bottom = 180.dp),
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
+        item {
+            fun launchRemix() {
+                homeViewModel.startRemix(homeViewModel.remixPrompt) { tracks ->
+                    // A mix is the point, so the engine that makes it one is switched on here
+                    // rather than left to whatever the listener set months ago.
+                    remixPrefs.setAutomixEnabled(true)
+                    playerViewModel.playPlaylist(tracks, 0, null)
+                }
+            }
+
+            remixModeReport?.let { report ->
+                RemixModeDialog(
+                    report = report,
+                    onDismiss = { remixModeReport = null },
+                    onConfirm = { mode ->
+                        remixPrefs.setRemixMode(mode.name)
+                        remixModeReport = null
+                        launchRemix()
+                    },
+                )
+            }
+
+            RemixPromptCard(
+                prompt = homeViewModel.remixPrompt,
+                onPromptChange = { homeViewModel.remixPrompt = it },
+                loading = homeViewModel.remixLoading,
+                empty = homeViewModel.remixEmpty,
+                understoodAs = homeViewModel.remixLabel,
+                onStart = {
+                    // Asked once, on the first mix, and never again unless the listener clears
+                    // the app's data - a question that returns is a question nobody reads.
+                    if (remixPrefs.getRemixMode() == null) {
+                        remixModeReport = com.alananasss.kittytune.data.remix.RemixCapabilities.inspect(context)
+                    } else {
+                        launchRemix()
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+
         item {
             val categoriesToShow = if (homeViewModel.personalizedCategories.isNotEmpty()) {
                 homeViewModel.personalizedCategories
@@ -598,6 +646,43 @@ fun HomeContent(
             }
 
             Column {
+                // Sits at the head of the filter row rather than in it: the others narrow what
+                // is browsed, this one skips browsing altogether, and a chip that behaves
+                // differently from its neighbours should not look like them.
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    listOf(
+                        Triple(Icons.Rounded.Album, R.string.remix_entry_set, "set"),
+                        Triple(Icons.Rounded.Bolt, R.string.remix_entry_energy, "Energy"),
+                        Triple(Icons.Rounded.Bedtime, R.string.remix_entry_wind_down, "Chillout"),
+                    ).forEach { (icon, labelRes, query) ->
+                        val label = stringResource(labelRes)
+                        AssistChip(
+                            onClick = {
+                                homeViewModel.remixPrompt = if (query == "set") label else query
+                                if (remixPrefs.getRemixMode() == null) {
+                                    remixModeReport =
+                                        com.alananasss.kittytune.data.remix.RemixCapabilities.inspect(context)
+                                } else {
+                                    homeViewModel.startRemix(homeViewModel.remixPrompt) { tracks ->
+                                        remixPrefs.setAutomixEnabled(true)
+                                        playerViewModel.playPlaylist(tracks, 0, null)
+                                    }
+                                }
+                            },
+                            label = { Text(label) },
+                            leadingIcon = {
+                                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                        )
+                    }
+                }
+
                 HomeFilterRow(
                     categories = categoriesToShow,
                     onCategoryClick = { category ->

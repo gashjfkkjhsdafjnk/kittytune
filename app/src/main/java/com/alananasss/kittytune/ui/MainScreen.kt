@@ -491,7 +491,7 @@ fun MainScreen(
             bottomBar = {
             }
         ) { _ ->
-            val allTabKeys = listOf("home", "search", "genres", "library")
+            val allTabKeys = listOf("home", "search", "genres", "dj", "library")
             val bottomNavItemsKeys = prefs.bottomMenuItemsFlow().collectAsState(initial = prefs.getBottomMenuItems()).value
 
             val tabs = allTabKeys.mapNotNull { key ->
@@ -499,6 +499,7 @@ fun MainScreen(
                     "home" -> Screen.Home
                     "search" -> Screen.Search
                     "genres" -> Screen.Explore
+                    "dj" -> Screen.Dj
                     "library" -> Screen.Library
                     else -> null
                 } ?: return@mapNotNull null
@@ -507,7 +508,9 @@ fun MainScreen(
                     title = stringResource(screen.titleResId),
                     icon = screen.icon ?: Icons.Rounded.Home,
                     route = screen.route,
-                    visible = bottomNavItemsKeys.contains(key)
+                    // Shown unless the listener has arranged their bar already and left it
+                    // out: a tab added after they chose would otherwise never appear.
+                    visible = bottomNavItemsKeys.contains(key) || (key == "dj" && bottomNavItemsKeys.isNotEmpty())
                 )
             }
 
@@ -868,6 +871,10 @@ fun MainScreen(
                             viewModel = playerViewModel,
                             onClose = { navController.popBackStack() }
                         )
+                    }
+
+                    clippedComposable(Screen.Dj.route) {
+                        com.alananasss.kittytune.ui.dj.DjScreen(viewModel = playerViewModel)
                     }
 
                     clippedComposable("genres") {
@@ -1642,6 +1649,18 @@ fun MainScreen(
                 MenuSheetContent(playerViewModel)
                 Spacer(Modifier.height(32.dp))
             }
+        }
+
+        playerViewModel.shareCardTrack?.let { cardTrack ->
+            com.alananasss.kittytune.ui.share.ShareCardSheet(
+                artwork = playerViewModel.shareCardArtwork,
+                title = cardTrack.title ?: stringResource(R.string.untitled_track),
+                artist = cardTrack.displayArtist.ifBlank { stringResource(R.string.unknown_artist) },
+                trackId = cardTrack.id,
+                trackUrl = cardTrack.permalinkUrl,
+                lyrics = playerViewModel.shareCardLyrics,
+                onDismiss = { playerViewModel.dismissShareCard() },
+            )
         }
 
         if (playerViewModel.showAddToPlaylistSheet) {

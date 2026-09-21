@@ -208,6 +208,284 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     var isMiniPlayerDismissing by mutableStateOf(false)
 
     var showMenuSheet by mutableStateOf(false)
+
+    /**
+     * The track whose share card is being composed, or null while no card is open.
+     *
+     * Held as the track rather than a flag so the sheet keeps showing the one the user picked
+     * even if playback moves on underneath it - a card that changed its artwork mid-compose
+     * would be shared as something the user never approved.
+     */
+    var shareCardTrack by mutableStateOf<Track?>(null)
+        private set
+
+    /** Artwork for [shareCardTrack], loaded once when the sheet opens. */
+    var shareCardArtwork by mutableStateOf<Bitmap?>(null)
+        private set
+
+    /**
+     * Lines of the song to offer on the card, taken around where playback stands.
+     *
+     * Captured when the sheet opens rather than followed live: the card is a still, and lyrics
+     * that moved on between the preview and the send would share a line the user never saw.
+     */
+    var shareCardLyrics by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /**
+     * Reworks the playing track on its own beat grid, when the listener has asked for it.
+     *
+     * Driven from the progress loop rather than its own timer: that loop already knows where
+     * playback stands, already stops when playback does, and already survives a seek.
+     */
+    private val remixDirector by lazy {
+        com.alananasss.kittytune.audio.automix.RemixDirector(MusicManager.activeRemixProcessor)
+    }
+
+    /** The track the director currently holds a grid for, so it is loaded once per track. */
+    private var remixGridTrackId: Long? = null
+
+    /** The grid the director is working on, kept so a skip can be placed on it too. */
+    private var remixGridBpm: Float = 0f
+        set(value) { field = value; remixGridBpmPublic = value }
+
+    /** The tempo the deck is working on, shown so a missing grid is visible rather than silent. */
+    var remixGridBpmPublic by mutableStateOf(0f)
+        private set
+    private var remixGridFirstBeatMs: Long = 0L
+
+    /** Milliseconds until the mix a skip has queued, or null when none is waiting. */
+    var mixedSkipInMs by mutableStateOf<Long?>(null)
+        private set
+
+    private var mixedSkipJob: Job? = null
+
+    /**
+     * Skips by mixing into the next track on the next bar, instead of cutting on the press.
+     *
+     * The difference between a player and a deck. A cut lands wherever the finger did, which is
+     * almost never on the beat; waiting for the bar line costs at most two seconds and is the
+     * whole reason the result sounds deliberate. The wait is shown, because a button that does
+     * nothing for a moment reads as broken unless the app says what it is waiting for.
+     *
+     * Falls through to an ordinary skip when there is no grid to place it on - being slightly
+     * ragged beats not responding.
+     */
+    fun skipMixed() {
+        // Gated on the deck being on, not on the rework control. Those were the same switch only
+        // by accident, and someone who turned the deck on and got hard cuts had every reason to
+        // think the feature was broken.
+        if (!playerPrefs.getDjMode() || remixGridBpm <= 0f) {
+            playNext(manual = true)
+            return
+        }
+        // A second press while one is queued means they want it now, not two bars from now.
+        mixedSkipJob?.let {
+            it.cancel()
+            mixedSkipJob = null
+            mixedSkipInMs = null
+            playNext(manual = true)
+            return
+        }
+
+        val barMs = (60_000f / remixGridBpm) * 4f
+        val sinceFirst = (currentPosition - remixGridFirstBeatMs).coerceAtLeast(0L)
+        val untilBar = (barMs - (sinceFirst % barMs)).toLong().coerceIn(0L, barMs.toLong())
+
+        mixedSkipJob = viewModelScope.launch {
+            var left = untilBar
+            mixedSkipInMs = left
+            while (left > 0 && isActive) {
+                val step = minOf(100L, left)
+                delay(step)
+                left -= step
+                mixedSkipInMs = left
+            }
+            mixedSkipInMs = null
+            mixedSkipJob = null
+            if (isActive) {
+                // Routed through the same latch the automatic transition uses, so the two cannot
+                // both start a crossfade at once when the bar happens to fall near the trigger.
+                if (!MusicManager.isCrossfadingOut) {
+                    MusicManager.isCrossfadingOut = true
+                    playNext(manual = true, isCrossfade = true)
+                }
+            }
+        }
+    }
+
+    /**
+     * A trigger earlier than the plan's, when the pair is close enough to justify one.
+     *
+     * Recomputed as the queue moves rather than once per track, since the next track can change
+     * under it - a decision made against a track that is no longer next is worse than none.
+     */
+    private var earlyTriggerMs: Long? = null
+    private var earlyTriggerFor: Pair<Long, Long>? = null
+
+    /** Shown on the deck so an entry that arrives early is explained rather than surprising. */
+    var earlyEntryActive by mutableStateOf(false)
+        private set
+
+    private fun maybePlanEarlyEntry(intensity: Float) {
+        val current = currentTrack ?: return
+        val next = _queue.getOrNull(currentQueueIndex + 1) ?: run {
+            earlyTriggerMs = null
+            earlyEntryActive = false
+            return
+        }
+        val pair = current.id to next.id
+        if (earlyTriggerFor == pair) return
+        earlyTriggerFor = pair
+
+        val plan = com.alananasss.kittytune.audio.automix.AutomixManager.currentAutomixPlan ?: return
+        val durMs = MusicManager.player.duration.takeIf { it > 0 } ?: return
+
+        viewModelScope.launch {
+            val (out, incoming) = withContext(Dispatchers.IO) {
+                try {
+                    val dao = com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context).beatInfoDao()
+                    dao.getBeatInfo(current.id.toString()) to dao.getBeatInfo(next.id.toString())
+                } catch (_: Exception) {
+                    null to null
+                }
+            }
+            if (earlyTriggerFor != pair) return@launch
+            val earlier = com.alananasss.kittytune.audio.automix.EarlyEntryPlanner.earlierTrigger(
+                plannedTriggerMs = plan.triggerTimeMs,
+                durationMs = durMs,
+                outBeat = out,
+                inBeat = incoming,
+                intensity = intensity,
+            )
+            earlyTriggerMs = earlier
+            earlyEntryActive = earlier != null
+        }
+    }
+
+    /** Tempo and key of the track queued next, loaded alongside the grid for the current one. */
+    var nextDeckBpm by mutableStateOf<Float?>(null)
+        private set
+    var nextDeckKey by mutableStateOf<String?>(null)
+        private set
+
+    /** The track the deck is showing, so it is only looked up when it changes. */
+    private var nextDeckTrackId: Long? = null
+
+    /**
+     * Loads what the deck shows about the track queued next.
+     *
+     * Only from the cache, never triggering an analysis of its own: the lookahead already
+     * analyses the next track when it matters, and a deck panel is not a reason to decode audio.
+     */
+    private fun ensureNextDeck(track: Track?) {
+        if (track == null) {
+            nextDeckTrackId = null
+            nextDeckBpm = null
+            nextDeckKey = null
+            return
+        }
+        if (nextDeckTrackId == track.id) return
+        nextDeckTrackId = track.id
+        nextDeckBpm = null
+        nextDeckKey = null
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                try {
+                    com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context)
+                        .beatInfoDao().getBeatInfo(track.id.toString())
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (nextDeckTrackId != track.id || info == null) return@launch
+            nextDeckBpm = info.bpm.takeIf { it > 0f }
+            nextDeckKey = info.keyPitchClass?.let { pc ->
+                val names = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+                names[pc % 12] + if (info.keyIsMinor == true) "m" else ""
+            }
+        }
+    }
+
+    fun cancelMixedSkip() {
+        mixedSkipJob?.cancel()
+        mixedSkipJob = null
+        mixedSkipInMs = null
+    }
+
+    /**
+     * Gives the director the grid for [track], analysing it first if nobody has yet.
+     *
+     * The analysis is the same one automix uses and lands in the same cache, so a listener who
+     * has both on pays for it once. Until it arrives the director simply does nothing - working
+     * a track on a guessed tempo is worse than leaving it alone.
+     */
+    private fun ensureRemixGrid(track: Track) {
+        if (remixGridTrackId == track.id) return
+        remixGridTrackId = track.id
+        remixGridBpm = 0f
+        earlyTriggerMs = null
+        earlyTriggerFor = null
+        earlyEntryActive = false
+        remixDirector.setGrid(null, null)
+        cancelMixedSkip()
+        com.alananasss.kittytune.audio.automix.AutomixManager.maybeAnalyzeBeat(
+            track,
+            com.alananasss.kittytune.audio.automix.BeatAnalysisPriority.IMMEDIATE,
+        )
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                try {
+                    com.alananasss.kittytune.data.local.AppDatabase.getDatabase(context)
+                        .beatInfoDao().getBeatInfo(track.id.toString())
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (remixGridTrackId == track.id && info != null && info.confidence >= 0.3f) {
+                remixDirector.setGrid(info.bpm, info.firstBeatOffsetMs)
+                remixGridBpm = info.bpm
+                remixGridFirstBeatMs = info.firstBeatOffsetMs
+            } else if (remixGridTrackId == track.id) {
+                remixGridBpm = 0f
+            }
+        }
+    }
+
+
+    fun openShareCard(track: Track) {
+        shareCardTrack = track
+        shareCardArtwork = null
+        shareCardLyrics = lyricsSnippetAt(currentPosition)
+        showMenuSheet = false
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) { loadBitmap(track.fullResArtwork) }
+            // The sheet may already be gone, or moved on to another track, by the time a slow
+            // artwork arrives; dropping it then keeps a stale cover off the current card.
+            if (shareCardTrack?.id == track.id) shareCardArtwork = bitmap
+        }
+    }
+
+    fun dismissShareCard() {
+        shareCardTrack = null
+        shareCardArtwork = null
+        shareCardLyrics = emptyList()
+    }
+
+    /**
+     * Picks up to two lines starting at the one playing at [positionMs].
+     *
+     * Two is what actually fits the card without overrunning it: each line can itself wrap,
+     * so more than that crowds past the fixed card height. Starting at the current line rather
+     * than centring on it means the card carries the part that is about to be sung, which is
+     * what someone shares a lyric for.
+     */
+    private fun lyricsSnippetAt(positionMs: Long): List<String> {
+        val lines = lyricsLines.filter { it.text.isNotBlank() }
+        if (lines.isEmpty()) return emptyList()
+        val start = lines.indexOfLast { it.startTime <= positionMs }.coerceAtLeast(0)
+        return lines.drop(start).take(2).map { it.text }
+    }
     var navigateToPlaylistId by mutableStateOf<String?>(null)
     var trackForMenu by mutableStateOf<Track?>(null)
     var trackToEdit by mutableStateOf<Track?>(null)
@@ -4631,6 +4909,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                             saveStateAsync(savePositionOnly = true)
                         }
 
+                        // Fed before the transition logic below, so a phrase being worked is
+                        // handed over cleanly rather than cut off mid-roll.
+                        remixDirector.intensity = playerPrefs.getRemixRework()
+                        val reworkIntensity = playerPrefs.getRemixRework()
+                        if (playerPrefs.getDjMode()) {
+                            currentTrack?.let { ensureRemixGrid(it) }
+                            ensureNextDeck(_queue.getOrNull(currentQueueIndex + 1))
+                            maybePlanEarlyEntry(reworkIntensity)
+                        } else {
+                            earlyTriggerMs = null
+                        }
+                        val exoDurForRemix = MusicManager.player.duration
+                        remixDirector.onPosition(
+                            positionMs = currentPosition,
+                            remainingMs = if (exoDurForRemix > 0) exoDurForRemix - currentPosition else Long.MAX_VALUE,
+                        )
+
                         val crossfadeEnabled = playerPrefs.getCrossfadeEnabled()
                         val automixEnabled = playerPrefs.getAutomixEnabled()
                         val crossfadeMs = playerPrefs.getCrossfadeDuration() * 1000L
@@ -4684,7 +4979,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
                             val plan = if (isGaplessAlbum) null else com.alananasss.kittytune.audio.automix.AutomixManager.currentAutomixPlan
                             if (plan != null && dur > 0L) {
-                                val triggerTime = plan.triggerTimeMs
+                                // The plan's time is the safe one. When the pair is close in
+                                // tempo and key, going in a phrase or two earlier is what keeps a
+                                // set moving rather than playing every record to its end - so the
+                                // earlier of the two is used when the planner offers one.
+                                val triggerTime = earlyTriggerMs ?: plan.triggerTimeMs
                                 val remainingToTrigger = triggerTime - currentPosition
                                 val outBpm = com.alananasss.kittytune.audio.automix.AutomixManager.automixDebugInfo.value?.outBpm ?: 0f
                                 if (outBpm > 0f) {

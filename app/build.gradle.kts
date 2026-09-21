@@ -31,7 +31,15 @@ extensions.configure<ApplicationExtension> {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            // The x86 slices exist for emulators. A build meant for a phone can leave them out
+            // with -ParmOnly, which takes about a fifth off the download - worth having when the
+            // apk is passed around by link. Build types cannot narrow this: AGP merges abiFilters
+            // from defaultConfig upwards, so a build type can add an ABI but never remove one.
+            abiFilters += if (project.hasProperty("armOnly")) {
+                listOf("arm64-v8a", "armeabi-v7a")
+            } else {
+                listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            }
         }
     }
 
@@ -151,6 +159,11 @@ dependencies {
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.lottie.compose)
     implementation(libs.zxing.core)
+
+    // On-device sentence embeddings for reading what the listener typed into the remix
+    // field. Ships native libraries for every ABI, so it is measured against the APK before
+    // it is kept.
+    implementation(libs.mediapipe.tasks.text)
 
     // Scanning the desktop's pairing QR. zxing above already does the decoding; these are only
     // the camera frames to hand it (issue #33).

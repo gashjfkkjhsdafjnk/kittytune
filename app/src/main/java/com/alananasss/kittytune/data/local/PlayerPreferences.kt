@@ -122,6 +122,10 @@ class PlayerPreferences(context: Context) {
         private const val KEY_PRECISE_SPEED = "precise_speed_enabled"
         private const val KEY_AUTO_UPDATE = "auto_update_enabled"
         private const val KEY_YOUTUBE_FALLBACK = "youtube_fallback_enabled"
+        private const val KEY_SHARE_CARD_CODE = "share_card_code_mode"
+        private const val KEY_REMIX_MODE = "remix_intent_mode"
+        private const val KEY_REMIX_REWORK = "remix_rework_intensity"
+        private const val KEY_DJ_MODE = "dj_mode_active"
         private const val KEY_DOWNLOAD_DRM_STREAMS = "download_drm_streams_enabled"
         private const val KEY_SHOW_LYRICS_BUTTON = "show_lyrics_button_enabled"
         private const val KEY_INLINE_LYRICS = "inline_lyrics_enabled"
@@ -362,6 +366,44 @@ class PlayerPreferences(context: Context) {
 
     fun getShowLyricsButtonEnabled(): Boolean = prefs.getBoolean(KEY_SHOW_LYRICS_BUTTON, true)
     fun setShowLyricsButtonEnabled(enabled: Boolean) = prefs.edit { putBoolean(KEY_SHOW_LYRICS_BUTTON, enabled) }
+
+    /**
+     * Which code style the share card uses: 0 automatic, 1 solid, 2 halftone.
+     *
+     * Automatic is the default because the choice turns on something the listener cannot see -
+     * whether the artwork has room for a forced dot in both directions - but it stays a choice,
+     * since someone sharing a code they will scan themselves values the robust style, and
+     * someone posting a picture values the cover.
+     */
+    /**
+     * Which reading the listener chose for their own mix, or null before they were asked.
+     *
+     * Null is meaningful here: it is what makes the question appear once and then stop.
+     */
+    /**
+     * How hard the player reworks a track while it plays: 0 off, 1 every phrase.
+     *
+     * Off by default. Someone who put a track on wants to hear that track, and an app that
+     * starts rebuilding it uninvited is an app that is doing something to their music.
+     */
+    /**
+     * Whether the deck is driving playback.
+     *
+     * One switch rather than a handful of settings, because the things it turns on only make
+     * sense together: reworking a track but cutting hard on a skip is neither a player nor a
+     * deck. Off is the ordinary player, unchanged.
+     */
+    fun getDjMode(): Boolean = prefs.getBoolean(KEY_DJ_MODE, false)
+    fun setDjMode(active: Boolean) = prefs.edit { putBoolean(KEY_DJ_MODE, active) }
+
+    fun getRemixRework(): Float = prefs.getFloat(KEY_REMIX_REWORK, 0f)
+    fun setRemixRework(value: Float) = prefs.edit { putFloat(KEY_REMIX_REWORK, value.coerceIn(0f, 1f)) }
+
+    fun getRemixMode(): String? = prefs.getString(KEY_REMIX_MODE, null)
+    fun setRemixMode(mode: String) = prefs.edit { putString(KEY_REMIX_MODE, mode) }
+
+    fun getShareCardCodeMode(): Int = prefs.getInt(KEY_SHARE_CARD_CODE, 0)
+    fun setShareCardCodeMode(mode: Int) = prefs.edit { putInt(KEY_SHARE_CARD_CODE, mode) }
 
     fun getYouTubeFallbackEnabled(): Boolean = prefs.getBoolean(KEY_YOUTUBE_FALLBACK, true)
     fun setYouTubeFallbackEnabled(enabled: Boolean) = prefs.edit { putBoolean(KEY_YOUTUBE_FALLBACK, enabled) }
